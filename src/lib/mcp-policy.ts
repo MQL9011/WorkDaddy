@@ -1,0 +1,53 @@
+import type { HarnessId } from '../types/api'
+
+/**
+ * WorkDaddy does not own the network transport or OAuth discovery performed by
+ * OMP. Keep network MCP management outside the app instead of implying that
+ * selected app-side validation can secure an upstream runtime.
+ */
+export const NETWORK_MCP_UNAVAILABLE_DETAIL = 'Network MCP servers are managed outside WorkDaddy. WorkDaddy does not create, enable, disable, or authenticate HTTP/SSE servers; use the harness directly. Externally configured definitions are read-only here except explicit definition removal. Authorization is never inspected or changed by WorkDaddy.'
+
+export const NETWORK_MCP_AUTH_UNAVAILABLE = 'Network MCP authentication is managed outside WorkDaddy. Use the harness directly; WorkDaddy does not inspect or change MCP credentials.'
+
+export const LOCAL_MCP_STATE_UNAVAILABLE_DETAIL = 'This local MCP definition uses a key WorkDaddy cannot safely enable or disable. Its state is managed outside WorkDaddy; use the harness directly. Bounded exact-definition removal remains available when supported.'
+
+/** Exact MCP map keys above this limit stay visible but are not app-removable. */
+export const MAX_MCP_DEFINITION_KEY_LENGTH = 1_024
+
+const UNSAFE_MCP_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
+
+export interface McpAuthenticationCommand {
+  server?: string
+}
+
+function parsedAuthenticationCommand(match: RegExpMatchArray | null): McpAuthenticationCommand | undefined {
+  if (!match) return undefined
+  const server = match[1]?.trim()
+  if (!server || !/^[A-Za-z0-9][A-Za-z0-9._ -]{0,63}$/.test(server) || UNSAFE_MCP_KEYS.has(server)) return {}
+  return { server }
+}
+
+/** Recognizes the authentication command exposed by the harness without executing it. */
+export function parseMcpAuthenticationCommand(prompt: string, _harness: HarnessId): McpAuthenticationCommand | undefined {
+  const value = prompt.trim()
+  return parsedAuthenticationCommand(value.match(/^\/mcp\s+reauth(?:\s+([\s\S]*))?$/i))
+}
+
+/** Authentication is harness-owned, so no app-managed delivery path may forward these commands. */
+export function assertNoMcpAuthenticationCommand(prompt: string, harness: HarnessId): void {
+  if (parseMcpAuthenticationCommand(prompt, harness)) throw new TypeError(NETWORK_MCP_AUTH_UNAVAILABLE)
+}
+
+export function isAppManageableLocalMcpKey(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length >= 1
+    && value.length <= 64
+    && /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/.test(value)
+    && !UNSAFE_MCP_KEYS.has(value)
+}
+
+export function isNetworkMcpDefinition(value: unknown): boolean {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return record.type === 'http' || record.type === 'sse' || Object.hasOwn(record, 'url')
+}

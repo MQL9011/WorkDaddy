@@ -1,0 +1,196 @@
+{
+  "name": "work-daddy",
+  "version": "0.2.11",
+  "private": true,
+  "description": "A skill-first desktop workspace for oh-my-pi (OMP)",
+  "main": "out/main/index.js",
+  "desktopName": "workdaddy.desktop",
+  "author": {
+    "name": "WorkDaddy contributors"
+  },
+  "homepage": "https://github.com/MQL9011/WorkDaddy",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MQL9011/WorkDaddy.git"
+  },
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "npm run typecheck && npm run build:bundle",
+    "build:bundle": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.scripts.json",
+    "lint": "biome lint --config-path=scripts/release/biome.json electron src tests scripts electron.vite.config.ts playwright.config.ts vitest.config.ts",
+    "format:check": "biome format --config-path=scripts/release/biome.json scripts/release electron.vite.config.ts vitest.config.ts playwright.config.ts tests/release-scripts.test.ts",
+    "check": "npm run lint && npm run format:check",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "npm run build && npm run test:e2e:hermetic",
+    "test:e2e:hermetic": "playwright test",
+    "release:verify": "npm run release:verify:package && npm run test:e2e:hermetic",
+    "release:verify:package": "node scripts/release/preflight.mjs --toolchain-only && npm run typecheck && npm run check && npm run test:coverage && npm run build:bundle && npm run release:bundle-size",
+    "release:bundle-size": "node scripts/release/preflight.mjs --toolchain-only && node scripts/release/verify-bundle-size.mjs",
+    "audit:production": "node scripts/release/audit-production.mjs",
+    "package:mac": "node scripts/release/package.mjs --public --platform mac",
+    "package:mac:local-qa": "node scripts/release/package.mjs --qa --platform mac",
+    "package:linux": "node scripts/release/package.mjs --public --platform linux",
+    "package:linux:local-qa": "node scripts/release/package.mjs --qa --platform linux",
+    "package:win": "node scripts/release/package.mjs --public --platform win",
+    "package:win:local-qa": "node scripts/release/package.mjs --qa --platform win",
+    "release:local": "bash scripts/release/local-release.sh",
+    "release:preflight": "node scripts/release/preflight.mjs",
+    "release:preflight:toolchain": "node scripts/release/preflight.mjs --toolchain-only",
+    "toolchain:bootstrap": "node scripts/release/bootstrap-npm.mjs",
+    "postinstall": "node scripts/release/install-app-deps.mjs"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9",
+    "js-yaml": "^5.3.0",
+    "node-pty": "^1.1.0",
+    "prime-agent-ai": "file:vendor/prime-agent-ai-0.7.0-gooeypi.1.tgz"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.8",
+    "@electron/asar": "^4.2.1",
+    "@electron/fuses": "^2.1.3",
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.7",
+    "electron-vite": "^5.0.0",
+    "jsdom": "^30.0.1",
+    "lucide-react": "^1.31.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "typescript": "^7.0.2",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
+  },
+  "build": {
+    "appId": "ai.ancoder.work",
+    "productName": "WorkDaddy",
+    "asar": {
+      "smartUnpack": false
+    },
+    "files": [
+      "out/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "icon": "assets/icon.icns",
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "LSUIElement": true
+      },
+      "notarize": true,
+      "asarUnpack": [
+        "**/node_modules/node-pty/build/Release/pty.node",
+        "**/node_modules/node-pty/build/Release/spawn-helper"
+      ],
+      "files": [
+        "out/**/*",
+        "package.json"
+      ]
+    },
+    "linux": {
+      "category": "Development",
+      "synopsis": "A skill-first desktop workspace for oh-my-pi (OMP)",
+      "syncDesktopName": true,
+      "target": [
+        "AppImage",
+        "deb",
+        "rpm",
+        "pacman"
+      ],
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
+      "icon": "assets/icon.png",
+      "asarUnpack": [
+        "**/node_modules/node-pty/build/Release/pty.node"
+      ],
+      "files": [
+        "out/**/*",
+        "package.json"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "zip",
+        "appx"
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}",
+      "icon": "assets/icon.png",
+      "asarUnpack": [
+        "**/node_modules/node-pty/prebuilds/win32-${arch}/pty.node",
+        "**/node_modules/node-pty/prebuilds/win32-${arch}/conpty.node",
+        "**/node_modules/node-pty/prebuilds/win32-${arch}/conpty_console_list.node",
+        "**/node_modules/node-pty/prebuilds/win32-${arch}/winpty-agent.exe",
+        "**/node_modules/node-pty/prebuilds/win32-${arch}/winpty.dll",
+        "**/node_modules/node-pty/prebuilds/win32-${arch}/conpty/OpenConsole.exe",
+        "**/node_modules/node-pty/prebuilds/win32-${arch}/conpty/conpty.dll"
+      ],
+      "files": [
+        "out/**/*",
+        "package.json"
+      ]
+    },
+    "directories": {
+      "output": "release"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "MQL9011",
+      "repo": "WorkDaddy"
+    },
+    "afterPack": "scripts/release/after-pack.cjs",
+    "extraResources": [
+      {
+        "from": "assets/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "assets/extensions",
+        "to": "extensions"
+      },
+      {
+        "from": "assets/vault-samples",
+        "to": "vault-samples"
+      }
+    ],
+    "electronLanguages": [
+      "en-US"
+    ],
+    "appx": {
+      "applicationId": "WorkDaddy",
+      "identityName": "WorkDaddy",
+      "publisherDisplayName": "WorkDaddy",
+      "displayName": "WorkDaddy",
+      "backgroundColor": "#171716",
+      "languages": [
+        "en-US"
+      ]
+    }
+  },
+  "engines": {
+    "node": ">=24.15.0",
+    "npm": ">=12.0.2"
+  },
+  "packageManager": "npm@12.0.2"
+}

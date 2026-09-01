@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- "Agent is working" variant: the detached closing stroke takes the accent
+       colour. Static brand usage stays monochrome — this one is only for the
+       running state and the splash screen. -->
+  <g fill="none" stroke-width="12" stroke-linecap="butt">
+    <path d="M73.44 63.90 A30 30 0 1 1 77.71 43.82" stroke="#fafafa"/>
+    <path d="M77.71 52.18 A30 30 0 0 1 76.19 58.26" stroke="#3B6BE8"/>
+  </g>
+</svg>

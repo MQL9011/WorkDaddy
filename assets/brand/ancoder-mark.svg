@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- Precision geometric mark: O on a 24-unit grid. The ring breaks for 40° on
+       the right (-8°..32°); a detached 12° stroke sits in the gap ("agent picks
+       up the last stroke"). Center 48,48 · r 30 · stroke 3u · butt caps.
+       See mark-small.svg for the ≤20px variant and OmpMark in
+       src/components/ui.tsx for the React port. -->
+  <g fill="none" stroke="#fafafa" stroke-width="12" stroke-linecap="butt">
+    <path d="M73.44 63.90 A30 30 0 1 1 77.71 43.82"/>
+    <path d="M77.71 52.18 A30 30 0 0 1 76.19 58.26"/>
+  </g>
+</svg>

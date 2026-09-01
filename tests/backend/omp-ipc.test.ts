@@ -1,0 +1,326 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+const electronMocks = vi.hoisted(() => ({
+  app: {},
+  ipcMain: {
+    removeHandler: vi.fn(),
+    handle: vi.fn(),
+    on: vi.fn(),
+    removeAllListeners: vi.fn(),
+  },
+  shell: { openExternal: vi.fn(), showItemInFolder: vi.fn() },
+}))
+
+vi.mock('electron', () => electronMocks)
+
+import { registerIpc, type IpcRegistration } from '../../electron/main/ipc'
+import { OmpModelCatalogService, MAX_CATALOG_PROVIDERS } from '../../electron/main/providers-omp'
+
+const EXPECTED_URL = 'prime-work://app/'
+const OMP_SESSION = '/home/user/.omp/agent/sessions/bucket/session.jsonl'
+const fixtureDirs: string[] = []
+
+function fakeOverflowCatalog(): OmpModelCatalogService {
+  const directory = mkdtempSync(join(tmpdir(), 'gooeypi-omp-ipc-catalog-'))
+  fixtureDirs.push(directory)
+  const executable = join(directory, 'omp.cjs')
+  const models = Array.from({ length: MAX_CATALOG_PROVIDERS + 1 }, (_, index) => ({
+    provider: `provider-${String(index).padStart(3, '0')}`,
+    id: 'model',
+    name: `Provider ${index} model`,
+    reasoning: false,
+    thinking: null,
+    input: ['text'],
+    contextWindow: 1,
+    maxTokens: 1,
+  }))
+  writeFileSync(executable, `#!/usr/bin/env node
+if (process.argv[2] === '--version') { process.stdout.write('omp/1.2.3\\n'); process.exit(0) }
+if (process.argv[2] === 'models' && process.argv[3] === '--json') { process.stdout.write(${JSON.stringify(JSON.stringify({ models }))}); process.exit(0) }
+process.exit(2)
+`)
+  chmodSync(executable, 0o755)
+  return new OmpModelCatalogService(executable)
+}
+
+function serviceStub(): Record<string, unknown> {
+  return new Proxy({}, { get: () => vi.fn(async () => undefined) })
+}
+
+interface Harness {
+  invoke(channel: string, ...args: unknown[]): unknown
+  services: ReturnType<typeof buildServices>
+  sender: { send: ReturnType<typeof vi.fn> }
+  registration: IpcRegistration
+}
+
+function buildServices() {
+  const settingsState = { ompDisabledProviders: ['anthropic'], ompDisabledModels: [] as string[] }
+  const catalog = (disabled: ReadonlySet<string> = new Set(), disabledModels: ReadonlySet<string> = new Set()) => {
+    const models = [
+      { key: 'anthropic/claude', provider: 'anthropic', id: 'claude' },
+      { key: 'openai/gpt', provider: 'openai', id: 'gpt' },
+      { key: 'openai/gpt-mini', provider: 'openai', id: 'gpt-mini' },
+    ]
+    const providerEnabled = (id: string) => !disabled.has(id) && models.some((model) => model.provider === id && !disabledModels.has(model.key))
+    return {
+      models: models.map((model) => ({ ...model, enabled: providerEnabled(model.provider) && !disabledModels.has(model.key) })),
+      providers: ['anthropic', 'openai'].map((id) => ({ id, enabled: providerEnabled(id) })),
+    }
+  }
+  const ompSessionGate = vi.fn(async (path: unknown) => {
+    if (path === OMP_SESSION) return path
+    throw new TypeError('Session path is outside the OMP session directory')
+  })
+  return {
+    meta: { version: '0.0.0-test' },
+    refreshHarnesses: vi.fn(async () => ({ meta: { version: '0.0.0-refreshed' }, settings: settingsState })),
+    projects: { ...serviceStub(), list: vi.fn(async () => ['omp-projects']), listWorktrees: vi.fn(async () => ['omp-worktrees']), openWorktree: vi.fn(async () => 'omp-open'), createWorktree: vi.fn(async () => 'omp-create'), grantInferred: vi.fn(async () => 'omp-grant') },
+    sessions: {
+      ...serviceStub(),
+      onDidChange: vi.fn(() => () => undefined),
+      requireSessionPath: ompSessionGate,
+      list: vi.fn(async () => ['omp-sessions']),
+      read: vi.fn(async () => ['omp-transcript']),
+      rename: vi.fn(async () => true),
+      archive: vi.fn(async () => true),
+    },
+    agents: {
+      ...serviceStub(),
+      has: vi.fn((id: string) => id === 'omp-runtime'),
+      start: vi.fn(async (options: unknown) => ({ started: 'omp', options })),
+      command: vi.fn(async () => ({ ok: 'omp' })),
+      stop: vi.fn(async () => true),
+      list: vi.fn(() => [{ runtimeId: 'omp-runtime', harness: 'omp' }]),
+    },
+    terminals: { ...serviceStub(), killForSession: vi.fn(async () => undefined) },
+    git: serviceStub(),
+    plugins: { ...serviceStub(), list: vi.fn(async () => 'omp-plugins'), install: vi.fn(async () => undefined), installExtension: vi.fn(async () => undefined), connectMcp: vi.fn(async () => undefined), setMcpEnabled: vi.fn(async () => undefined), mutateCapability: vi.fn(async () => undefined), refresh: vi.fn(async () => 'omp-plugins'), readSkillDocument: vi.fn(async () => 'omp-skill-document') },
+    catalog: {
+      catalog: vi.fn(async (_force: boolean, disabled: ReadonlySet<string>, disabledModels: ReadonlySet<string>) => catalog(disabled, disabledModels)),
+    },
+    settings: {
+      ...serviceStub(),
+      get: vi.fn(() => settingsState),
+      update: vi.fn(async (patch: Partial<typeof settingsState>) => { Object.assign(settingsState, patch); return settingsState }),
+    },
+    browser: { ...serviceStub(), closeForSession: vi.fn(() => true), onDidChange: vi.fn(() => vi.fn()), onPointer: vi.fn(() => vi.fn()), onActivity: vi.fn(() => vi.fn()) },
+    installOmp: vi.fn(async (onProgress: (phase: string) => void) => {
+      onProgress('checking')
+      onProgress('downloading')
+      return { path: '/managed/bin/omp', version: 'v17.3.5' }
+    }),
+  }
+}
+
+describe('harness-aware IPC routing', () => {
+  let harness: Harness
+
+  beforeEach(() => {
+    const handlers = new Map<string, (event: unknown, ...args: unknown[]) => unknown>()
+    electronMocks.ipcMain.handle.mockReset()
+    electronMocks.ipcMain.on.mockReset()
+    electronMocks.ipcMain.handle.mockImplementation((channel: string, listener: (event: unknown, ...args: unknown[]) => unknown) => {
+      handlers.set(channel, listener)
+    })
+    const services = buildServices()
+    const registration = registerIpc(services as never, EXPECTED_URL)
+    const mainFrame = { url: EXPECTED_URL }
+    const sender = { id: 1, isDestroyed: () => false, getURL: () => EXPECTED_URL, mainFrame, send: vi.fn() }
+    registration.authorize(sender as never)
+    const event = { sender, senderFrame: mainFrame }
+    harness = {
+      invoke: (channel, ...args) => handlers.get(channel)!(event, ...args),
+      services,
+      sender,
+      registration,
+    }
+  })
+
+  afterEach(() => {
+    harness.registration.dispose()
+    for (const directory of fixtureDirs.splice(0)) rmSync(directory, { recursive: true, force: true })
+  })
+
+  it('exposes harness refresh through the fixed authorized app channel', async () => {
+    await expect(harness.invoke('app:refresh-harnesses')).resolves.toMatchObject({ meta: { version: '0.0.0-refreshed' } })
+    expect(harness.services.refreshHarnesses).toHaveBeenCalledTimes(1)
+  })
+
+  it('installs omp and forwards progress phases to the requesting renderer', async () => {
+    await expect(harness.invoke('app:install-omp')).resolves.toEqual({ path: '/managed/bin/omp', version: 'v17.3.5' })
+    expect(harness.sender.send).toHaveBeenCalledWith('app:install-omp-progress', { phase: 'checking' })
+    expect(harness.sender.send).toHaveBeenCalledWith('app:install-omp-progress', { phase: 'downloading' })
+  })
+
+  it('rejects harness values outside the strict enum on every routed channel', async () => {
+    for (const channel of ['projects:list', 'projects:add']) {
+      await expect(async () => harness.invoke(channel, 'codex')).rejects.toThrow('Invalid harness')
+    }
+    await expect(async () => harness.invoke('sessions:list', undefined, false, 'OMP')).rejects.toThrow('Invalid harness')
+    await expect(async () => harness.invoke('providers:catalog', false, 'codex')).rejects.toThrow('Invalid harness')
+    await expect(async () => harness.invoke('plugins:list', undefined, 'OMP')).rejects.toThrow('Invalid harness')
+    expect(harness.services.agents.start).not.toHaveBeenCalled()
+  })
+
+  it('routes agent:start, strips the routing field, and forwards commands by runtime id', async () => {
+    await expect(harness.invoke('agent:start', { cwd: '/work', harness: 'omp' })).resolves.toEqual({ started: 'omp', options: { cwd: '/work' } })
+    expect(harness.services.agents.start).toHaveBeenCalledWith({ cwd: '/work' })
+
+    await expect(harness.invoke('agent:command', 'omp-runtime', { type: 'abort' })).resolves.toEqual({ ok: 'omp' })
+    expect(harness.services.agents.command).toHaveBeenCalledWith('omp-runtime', { type: 'abort' })
+
+    await expect(harness.invoke('agent:stop', 'omp-runtime')).resolves.toBe(true)
+    expect(harness.services.agents.stop).toHaveBeenCalledWith('omp-runtime')
+
+    expect(harness.invoke('agent:list')).toEqual([{ runtimeId: 'omp-runtime', harness: 'omp' }])
+  })
+
+  it('rejects an agent:start options bag carrying an invalid harness', async () => {
+    await expect(async () => harness.invoke('agent:start', { cwd: '/tmp', harness: 1 })).rejects.toThrow('Invalid harness')
+    expect(harness.services.agents.start).not.toHaveBeenCalled()
+  })
+
+  it('routes sessions:list and projects channels for the omp harness', async () => {
+    await expect(harness.invoke('sessions:list', undefined, false)).resolves.toEqual(['omp-sessions'])
+    await expect(harness.invoke('sessions:list', '/repo', true, 'omp', true)).resolves.toEqual(['omp-sessions'])
+    expect(harness.services.sessions.list).toHaveBeenLastCalledWith('/repo', true, true)
+    await expect(harness.invoke('projects:list')).resolves.toEqual(['omp-projects'])
+    await expect(harness.invoke('projects:grant-inferred', '/somewhere')).resolves.toBe('omp-grant')
+    expect(harness.services.projects.grantInferred).toHaveBeenCalledWith('/somewhere')
+    await expect(harness.invoke('projects:list-worktrees', '/repo')).resolves.toEqual(['omp-worktrees'])
+    await expect(harness.invoke('projects:open-worktree', '/repo', '/linked')).resolves.toBe('omp-open')
+    await expect(harness.invoke('projects:create-worktree', '/repo', 'feature')).resolves.toBe('omp-create')
+    expect(harness.services.projects.listWorktrees).toHaveBeenCalledWith('/repo')
+    expect(harness.services.projects.openWorktree).toHaveBeenCalledWith('/repo', '/linked')
+    expect(harness.services.projects.createWorktree).toHaveBeenCalledWith('/repo', 'feature')
+  })
+
+  it('routes plugin catalog, installation, and MCP configuration', async () => {
+    await harness.invoke('plugins:list', '/repo')
+    expect(harness.services.plugins.list).toHaveBeenCalledWith('/repo')
+
+    await harness.invoke('plugins:install', 'npm:example')
+    expect(harness.services.plugins.install).toHaveBeenCalledWith('npm:example')
+    await harness.invoke('plugins:install-extension', { source: '/tmp/example.ts', scope: 'user' })
+    expect(harness.services.plugins.installExtension).toHaveBeenCalledWith({ source: '/tmp/example.ts', scope: 'user' })
+    await harness.invoke('plugins:connect-mcp', { name: 'docs' })
+    expect(harness.services.plugins.connectMcp).toHaveBeenCalledWith({ name: 'docs' })
+    await harness.invoke('plugins:set-mcp-enabled', { name: 'docs', scope: 'user', enabled: false })
+    expect(harness.services.plugins.setMcpEnabled).toHaveBeenCalledWith({ name: 'docs', scope: 'user', enabled: false })
+    await harness.invoke('plugins:mutate-capability', { name: 'docs', action: 'enable' })
+    expect(harness.services.plugins.mutateCapability).toHaveBeenCalledWith({ name: 'docs', action: 'enable' })
+    await harness.invoke('plugins:refresh')
+    expect(harness.services.plugins.refresh).toHaveBeenCalledOnce()
+    await expect(harness.invoke('plugins:read-skill-document', '/repo/skills/reviewer/SKILL.md')).resolves.toBe('omp-skill-document')
+    expect(harness.services.plugins.readSkillDocument).toHaveBeenCalledWith('/repo/skills/reviewer/SKILL.md')
+  })
+
+  it('routes session file operations and disposes browser/terminal state on archive', async () => {
+    await expect(harness.invoke('sessions:read', OMP_SESSION)).resolves.toEqual(['omp-transcript'])
+    expect(harness.services.sessions.read).toHaveBeenCalledWith(OMP_SESSION)
+
+    await expect(harness.invoke('sessions:rename', OMP_SESSION, 'Title')).resolves.toBe(true)
+    expect(harness.services.sessions.rename).toHaveBeenCalledWith(OMP_SESSION, 'Title')
+
+    await expect(harness.invoke('sessions:archive', OMP_SESSION, true)).resolves.toBe(true)
+    expect(harness.services.sessions.archive).toHaveBeenCalledWith(OMP_SESSION, true)
+    expect(harness.services.browser.closeForSession).toHaveBeenCalledWith(OMP_SESSION)
+    expect(harness.services.terminals.killForSession).toHaveBeenCalledWith(OMP_SESSION)
+
+    harness.services.browser.closeForSession.mockClear()
+    harness.services.terminals.killForSession.mockClear()
+    await expect(harness.invoke('sessions:archive', OMP_SESSION, false)).resolves.toBe(true)
+    expect(harness.services.browser.closeForSession).not.toHaveBeenCalled()
+    expect(harness.services.terminals.killForSession).not.toHaveBeenCalled()
+  })
+
+  it('does not register the retired daemon follow-up or MCP OAuth channels', () => {
+    expect(electronMocks.ipcMain.handle).not.toHaveBeenCalledWith('sessions:follow-up', expect.any(Function))
+    expect(electronMocks.ipcMain.handle).not.toHaveBeenCalledWith('providers:save-api-key', expect.any(Function))
+    expect(electronMocks.ipcMain.handle).not.toHaveBeenCalledWith('providers:start-mcp-oauth', expect.any(Function))
+    expect(electronMocks.ipcMain.handle).not.toHaveBeenCalledWith('providers:logout-mcp', expect.any(Function))
+  })
+
+  it('reads the provider catalog through the desktop-owned disabled-provider settings', async () => {
+    await expect(harness.invoke('providers:catalog', true)).resolves.toMatchObject({ providers: [{ id: 'anthropic', enabled: false }, { id: 'openai', enabled: true }] })
+    expect(harness.services.catalog.catalog).toHaveBeenCalledWith(true, new Set(['anthropic']), new Set())
+  })
+
+  it('stores provider visibility in desktop settings without mutating the CLI', async () => {
+    await expect(harness.invoke('providers:set-enabled', 'openai', false)).resolves.toMatchObject({
+      providers: [{ id: 'anthropic', enabled: false }, { id: 'openai', enabled: false }],
+    })
+    expect(harness.services.settings.update).toHaveBeenCalledWith({ ompDisabledProviders: ['anthropic', 'openai'], ompDisabledModels: [] })
+
+    await expect(harness.invoke('providers:set-disabled', ['openai'])).resolves.toMatchObject({
+      providers: [{ id: 'anthropic', enabled: true }, { id: 'openai', enabled: false }],
+    })
+    expect(harness.services.settings.update).toHaveBeenLastCalledWith({ ompDisabledProviders: ['openai'], ompDisabledModels: [] })
+  })
+
+  it('keeps provider and model visibility synchronized in both directions', async () => {
+    await expect(harness.invoke('providers:set-enabled', 'openai', false)).resolves.toMatchObject({
+      providers: [{ id: 'anthropic', enabled: false }, { id: 'openai', enabled: false }],
+      models: [
+        { key: 'anthropic/claude', enabled: false },
+        { key: 'openai/gpt', enabled: false },
+        { key: 'openai/gpt-mini', enabled: false },
+      ],
+    })
+
+    await expect(harness.invoke('providers:set-model-enabled', 'openai/gpt', true)).resolves.toMatchObject({
+      providers: [{ id: 'anthropic', enabled: false }, { id: 'openai', enabled: true }],
+      models: [
+        { key: 'anthropic/claude', enabled: false },
+        { key: 'openai/gpt', enabled: true },
+        { key: 'openai/gpt-mini', enabled: false },
+      ],
+    })
+    expect(harness.services.settings.update).toHaveBeenLastCalledWith({ ompDisabledProviders: ['anthropic'], ompDisabledModels: ['openai/gpt-mini'] })
+
+    await expect(harness.invoke('providers:set-model-enabled', 'openai/gpt', false)).resolves.toMatchObject({
+      providers: [{ id: 'anthropic', enabled: false }, { id: 'openai', enabled: false }],
+      models: [
+        { key: 'anthropic/claude', enabled: false },
+        { key: 'openai/gpt', enabled: false },
+        { key: 'openai/gpt-mini', enabled: false },
+      ],
+    })
+    expect(harness.services.settings.update).toHaveBeenLastCalledWith({ ompDisabledProviders: ['anthropic', 'openai'], ompDisabledModels: ['openai/gpt', 'openai/gpt-mini'] })
+
+    await expect(harness.invoke('providers:set-enabled', 'openai', true)).resolves.toMatchObject({
+      providers: [{ id: 'anthropic', enabled: false }, { id: 'openai', enabled: true }],
+      models: [
+        { key: 'anthropic/claude', enabled: false },
+        { key: 'openai/gpt', enabled: true },
+        { key: 'openai/gpt-mini', enabled: true },
+      ],
+    })
+    expect(harness.services.settings.update).toHaveBeenLastCalledWith({ ompDisabledProviders: ['anthropic'], ompDisabledModels: [] })
+  })
+
+  it('applies provider and model toggles only to models retained by a real overflow catalog', async () => {
+    const overflowCatalog = fakeOverflowCatalog()
+    const catalogService = harness.services.catalog as unknown as { catalog: OmpModelCatalogService['catalog'] }
+    catalogService.catalog = overflowCatalog.catalog.bind(overflowCatalog)
+
+    const initial = await harness.invoke('providers:catalog', true) as Awaited<ReturnType<OmpModelCatalogService['catalog']>>
+    expect(initial.providers).toHaveLength(MAX_CATALOG_PROVIDERS)
+    expect(initial.models).toHaveLength(MAX_CATALOG_PROVIDERS)
+    expect(initial.models.some((model) => model.key === 'provider-256/model')).toBe(false)
+
+    const disabled = await harness.invoke('providers:set-enabled', 'provider-000', false) as Awaited<ReturnType<OmpModelCatalogService['catalog']>>
+    expect(disabled.providers.find((provider) => provider.id === 'provider-000')?.enabled).toBe(false)
+    expect(disabled.models.find((model) => model.key === 'provider-000/model')?.enabled).toBe(false)
+
+    const reenabled = await harness.invoke('providers:set-model-enabled', 'provider-000/model', true) as Awaited<ReturnType<OmpModelCatalogService['catalog']>>
+    expect(reenabled.providers.find((provider) => provider.id === 'provider-000')?.enabled).toBe(true)
+    expect(reenabled.models.find((model) => model.key === 'provider-000/model')?.enabled).toBe(true)
+    await expect(async () => harness.invoke('providers:set-enabled', 'provider-256', false)).rejects.toThrow('Provider was not found')
+    await expect(async () => harness.invoke('providers:set-model-enabled', 'provider-256/model', false)).rejects.toThrow('Model was not found')
+  })
+})

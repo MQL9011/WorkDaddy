@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- Small-size variant for ≤20px: the break and the detached stroke collapse
+       into a smudge at that scale, so the ring closes and the stroke thickens
+       to 3.5u. Outer diameter stays 72 to match the primary mark. -->
+  <circle cx="48" cy="48" r="29" fill="none" stroke="#fafafa" stroke-width="14"/>
+</svg>
