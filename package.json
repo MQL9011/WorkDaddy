@@ -1,6 +1,6 @@
 {
   "name": "work-daddy",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "private": true,
   "description": "A skill-first desktop workspace for oh-my-pi (OMP)",
   "main": "out/main/index.js",

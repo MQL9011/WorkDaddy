@@ -15,18 +15,18 @@
 
 ## 下载
 
-当前版本 **0.2.11**。安装包发布在 GitHub Releases：
+当前版本 **0.2.12**。安装包发布在 GitHub Releases：
 
 **https://github.com/MQL9011/WorkDaddy/releases/latest**
 
 | 平台 | 安装包 | 说明 |
 | --- | --- | --- |
-| macOS（Apple 芯片） | [WorkDaddy-0.2.11-m-chip.dmg](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/WorkDaddy-0.2.11-m-chip.dmg) | 已签名公证，双击安装 |
-| Windows（x64） | [WorkDaddy-0.2.11-win-x64.exe](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/WorkDaddy-0.2.11-win-x64.exe) | 免签名 beta；SmartScreen 可能提示，选「更多信息 → 仍要运行」 |
+| macOS（Apple 芯片） | [WorkDaddy-0.2.12-m-chip.dmg](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.12/WorkDaddy-0.2.12-m-chip.dmg) | 已签名公证，双击安装 |
+| Windows（x64） | [WorkDaddy-0.2.12-win-x64.exe](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.12/WorkDaddy-0.2.12-win-x64.exe) | 免签名 beta；SmartScreen 可能提示，选「更多信息 → 仍要运行」 |
 
-也可下便携包：[macOS arm64 zip](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/WorkDaddy-0.2.11-arm64.zip) · [Windows zip](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/WorkDaddy-0.2.11-win-x64.zip)。校验和见同目录 [SHA256SUMS.txt](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/SHA256SUMS.txt)。
+也可下便携包：[macOS arm64 zip](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.12/WorkDaddy-0.2.12-arm64.zip) · [Windows zip](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.12/WorkDaddy-0.2.12-win-x64.zip)。校验和见同目录 [SHA256SUMS.txt](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.12/SHA256SUMS.txt)。
 
-Linux 与 Intel Mac 安装包尚未随 0.2.11 发布，后续版本会放在同一 Releases 页。
+Linux 与 Intel Mac 安装包尚未随 0.2.12 发布，后续版本会放在同一 Releases 页。
 
 仓库与问题反馈：[github.com/MQL9011/WorkDaddy](https://github.com/MQL9011/WorkDaddy)
 
