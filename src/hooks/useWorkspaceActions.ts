@@ -117,8 +117,11 @@ export function parseMcpCommand(prompt: string, harness: HarnessId): McpCommand 
 export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
   const grantProject = async (project: ProjectRecord): Promise<ProjectRecord> => {
     const { bridge, workspace, setProjects, gitRequestRef, setGitSnapshot } = getDeps()
-    if (!bridge || !project.inferred) return project
-    const granted = await bridge.projects.grantInferred(project.primaryFolder, project.harness)
+    if (!bridge) return project
+    if (!project.inferred && project.authorized) return project
+    const granted = project.inferred
+      ? await bridge.projects.grantInferred(project.primaryFolder, project.harness)
+      : await bridge.projects.regrant(project.primaryFolder, project.harness)
     setProjects((items) => items.map((item) => item.id === project.id ? granted : item))
     const selected = workspace.workspaceRef.current
     if (selected.project?.id !== project.id) return granted
@@ -155,7 +158,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
   }
   const toggleTerminal = async () => {
     const { settingsState, activeProject, reportError } = getDeps()
-    if (!settingsState.terminalOpen && activeProject?.inferred) {
+    if (!settingsState.terminalOpen && activeProject && (activeProject.inferred || !activeProject.authorized)) {
       try { await grantProject(activeProject) } catch (error) { reportError(error); return }
     }
     persistPanel({ terminalOpen: !settingsState.terminalOpen })

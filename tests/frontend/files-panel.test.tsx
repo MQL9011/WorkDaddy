@@ -93,8 +93,7 @@ const sampleProject: ProjectRecord = {
   pinned: false,
   createdAt: new Date().toISOString(),
   lastOpenedAt: new Date().toISOString(),
-  sessionCount: 1,
-}
+  sessionCount: 1, authorized: true }
 
 const emptyGit: GitStatus = { isRepo: true, files: [] }
 

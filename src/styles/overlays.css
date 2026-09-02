@@ -84,3 +84,28 @@
 @keyframes modal-in { from { opacity: 0; transform: translateY(5px) scale(.99); } }
 @keyframes palette-in { from { opacity: 0; transform: translateY(-5px) scale(.995); } }
 .reduce-motion *, .reduce-motion *::before, .reduce-motion *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+
+
+.onboarding__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  text-align: left;
+}
+
+.onboarding__field input {
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle, rgba(127, 127, 127, 0.35));
+  background: var(--surface-input, transparent);
+  color: inherit;
+}
+
+.onboarding__hint {
+  margin: 0;
+  color: var(--text-muted, #888);
+  font-size: 12px;
+}

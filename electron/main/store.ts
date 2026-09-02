@@ -13,7 +13,7 @@ export interface FolderIdentity {
   birthtimeNs?: string
 }
 
-export interface PersistedProject extends Omit<ProjectRecord, 'sessionCount' | 'gitBranch' | 'inferred'> {
+export interface PersistedProject extends Omit<ProjectRecord, 'sessionCount' | 'gitBranch' | 'inferred' | 'authorized'> {
   folderIdentities?: Record<string, FolderIdentity>
 }
 

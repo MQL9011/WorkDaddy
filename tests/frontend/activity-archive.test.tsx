@@ -13,8 +13,7 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
 const project: ProjectRecord = {
   id: 'project', harness: 'omp', name: 'Project', path: '/project', folders: ['/project'], primaryFolder: '/project',
-  pinned: false, createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 2,
-}
+  pinned: false, createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 2, authorized: true }
 const activeSession: SessionRecord = {
   id: 'active', harness: 'omp', filePath: '/sessions/active.jsonl', projectPath: '/project', title: 'Active chat',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-02T00:00:00.000Z', status: 'complete', depth: 0, unread: true,

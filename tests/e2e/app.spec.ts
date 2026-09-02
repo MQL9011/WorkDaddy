@@ -167,6 +167,7 @@ function createHermeticFixture(activeSession = false): { userData: string; home:
     projects: [{
       id: 'multi-folder-project', name: 'Multi-folder fixture', path: canonicalProject,
       folders: [canonicalProject, canonicalSecondary], primaryFolder: canonicalProject,
+      authorized: true,
       pinned: false, createdAt: '2025-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z',
       folderIdentities: { [canonicalProject]: identity(canonicalProject), [canonicalSecondary]: identity(canonicalSecondary) },
     }],
@@ -322,7 +323,7 @@ const args = process.argv.slice(2)
 if (args.includes('--version')) { process.stdout.write('omp/17.2.11\\n'); process.exit(0) }
 if (args[0] === 'models' && args.includes('--json')) {
   process.stdout.write(JSON.stringify({ models: [
-    { provider: 'anthropic', id: 'claude-fixture', name: 'Claude Fixture', contextWindow: 200000, maxTokens: 8192, reasoning: true, thinking: ['low', 'high'], input: ['text'] },
+    { provider: 'deepseek', id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash', contextWindow: 200000, maxTokens: 8192, reasoning: false, thinking: null, input: ['text'] },
     { provider: 'openai-codex', id: 'gpt-fixture', name: 'GPT Fixture', contextWindow: 200000, maxTokens: 8192, reasoning: true, thinking: ['low', 'high'], input: ['text'] },
   ] })); process.exit(0)
 }
@@ -730,83 +731,44 @@ test.describe('Prime Work desktop smoke', () => {
     await expect(page.getByRole('button', { name: 'Prime Work — switch harness' })).toBeVisible()
     await expect(page.locator('.session-row__title').filter({ hasText: 'Hermetic desktop fixture' })).toBeVisible()
   })
-  test('persists a desktop-only OMP provider toggle and removes its models from the picker', async () => {
-    await page.getByRole('button', { name: 'Prime Work — switch harness' }).click()
-    await page.getByRole('menuitemradio', { name: /OMP Work/ }).click()
+  test('opens Models settings with add-provider actions', async () => {
     await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
-    await page.getByRole('button', { name: 'Providers', exact: true }).click()
-    const anthropic = page.getByRole('checkbox', { name: 'Show anthropic provider' })
-    await expect(anthropic).toBeChecked()
-    await page.getByTitle('Hide provider in OMP').filter({ has: anthropic }).click()
-    await expect(anthropic).not.toBeChecked()
-    await expect.poll(() => JSON.parse(readFileSync(join(fixtureRoot, 'user-data', CURRENT_DESKTOP_STATE_FILENAME), 'utf8')).settings.ompDisabledProviders).toEqual(['anthropic'])
-
-    await page.locator('.session-row__title').filter({ hasText: 'OMP hermetic fixture' }).click()
-    const modelPicker = page.getByRole('combobox', { name: 'Model' })
-    await expect(modelPicker.locator('option', { hasText: 'GPT Fixture' })).toHaveCount(1)
-    await expect(modelPicker.locator('option', { hasText: 'Claude Fixture' })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Models', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Models' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add provider' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add custom provider' })).toBeVisible()
+    await page.getByRole('button', { name: 'Add provider' }).click()
+    await expect(page.getByRole('dialog', { name: 'Add a provider' })).toBeVisible()
+    await page.getByRole('button', { name: 'DeepSeek' }).click()
+    await expect(page.locator('input[type="password"]')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
+    await page.getByRole('button', { name: 'Close' }).click()
+    await page.getByRole('button', { name: 'Add custom provider' }).click()
+    await expect(page.getByText('Custom provider', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Create provider' })).toBeVisible()
   })
 
-  test('persists an OMP model toggle and removes only that model from every picker', async () => {
-    await page.getByRole('button', { name: 'Prime Work — switch harness' }).click()
-    await page.getByRole('menuitemradio', { name: /OMP Work/ }).click()
+  test('opens a catalog provider editor from Add provider', async () => {
     await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
-    await page.getByRole('button', { name: 'Providers', exact: true }).click()
-    await page.getByRole('tab', { name: /Models/ }).click()
-
-    const toggle = page.getByRole('checkbox', { name: 'Show GPT Fixture model' })
-    const groupHeader = page.locator('.provider-model-group__heading[aria-controls="provider-models-openai-codex"]')
-    await expect(groupHeader).toHaveAttribute('aria-expanded', 'true')
-    await groupHeader.click()
-    await expect(groupHeader).toHaveAttribute('aria-expanded', 'false')
-    await expect(toggle).toBeHidden()
-    await groupHeader.click()
-    await expect(groupHeader).toHaveAttribute('aria-expanded', 'true')
-    await expect(toggle).toBeVisible()
-    await expect(toggle).toBeChecked()
-    const row = page.locator('.provider-model-row').filter({ has: toggle })
-    await expect(row.locator('.provider-model-row__capabilities')).toBeVisible()
-    await expect(row.locator('.provider-model-row__toggle')).toBeVisible()
-    await row.locator('.provider-model-row__toggle').click()
-    await expect(toggle).not.toBeChecked()
-    await expect.poll(() => JSON.parse(readFileSync(join(fixtureRoot, 'user-data', CURRENT_DESKTOP_STATE_FILENAME), 'utf8')).settings.ompDisabledModels).toEqual(['openai-codex/gpt-fixture'])
-    await expect.poll(() => JSON.parse(readFileSync(join(fixtureRoot, 'user-data', CURRENT_DESKTOP_STATE_FILENAME), 'utf8')).settings.ompDisabledProviders).toEqual(['openai-codex'])
-    const groups = page.locator('.provider-model-group')
-    await expect(groups.nth(0)).toContainText('Claude Fixture')
-    await expect(groups.nth(1)).toContainText('GPT Fixture')
-
-    await page.locator('.session-row__title').filter({ hasText: 'OMP hermetic fixture' }).click()
-    const modelPicker = page.getByRole('combobox', { name: 'Model' })
-    await expect(modelPicker.locator('option', { hasText: 'GPT Fixture' })).toHaveCount(0)
-    await expect(modelPicker.locator('option', { hasText: 'Claude Fixture' })).toHaveCount(1)
-
-    await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
-    await page.getByRole('button', { name: 'Providers', exact: true }).click()
-    await page.getByRole('tab', { name: /Models/ }).click()
-    const hiddenToggle = page.getByRole('checkbox', { name: 'Show GPT Fixture model' })
-    await page.locator('.provider-model-row').filter({ has: hiddenToggle }).locator('.provider-model-row__toggle').click()
-    await expect(hiddenToggle).toBeChecked()
-    await expect.poll(() => JSON.parse(readFileSync(join(fixtureRoot, 'user-data', CURRENT_DESKTOP_STATE_FILENAME), 'utf8')).settings.ompDisabledModels).toEqual([])
-    await expect.poll(() => JSON.parse(readFileSync(join(fixtureRoot, 'user-data', CURRENT_DESKTOP_STATE_FILENAME), 'utf8')).settings.ompDisabledProviders).toEqual([])
-    await page.getByRole('tab', { name: /Providers/ }).click()
-    await expect(page.getByRole('checkbox', { name: 'Show openai-codex provider' })).toBeChecked()
+    await page.getByRole('button', { name: 'Models', exact: true }).click()
+    await page.getByRole('button', { name: 'Add provider' }).click()
+    await page.getByRole('button', { name: 'Anthropic' }).click()
+    await expect(page.locator('.models-card')).toHaveCount(1)
+    await expect(page.locator('input[type="password"]')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add custom provider' })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.getByRole('button', { name: 'Add custom provider' })).toBeEnabled()
   })
 
-  test('keeps Harness settings shared when changing the default while providers follow the active harness', async () => {
+  test('keeps Harness settings available and opens Models from the same settings page', async () => {
     await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
     await page.getByRole('button', { name: 'Harness', exact: true }).click()
     await expect(page.getByText('OMP approval mode', { exact: true })).toBeVisible()
-    await expect(page.getByLabel('Prime Agent executable override')).toBeVisible()
     await expect(page.getByLabel('OMP executable override')).toBeVisible()
-    await expect(page.getByLabel('Pi executable override')).toBeVisible()
 
-    const selects = page.locator('.settings-content select')
-    await selects.nth(0).selectOption('pi')
-    await expect(page.getByRole('button', { name: 'Pi Work — switch harness' })).toBeVisible()
-    await expect(page.getByText('OMP approval mode', { exact: true })).toBeVisible()
-
-    await page.getByRole('button', { name: 'Providers', exact: true }).click()
-    await expect(page.getByText('Pi catalogue', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Models', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Add provider' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add custom provider' })).toBeVisible()
   })
 
   test('refreshes harness discovery through the live settings and preload path', async () => {
@@ -1336,16 +1298,9 @@ test.describe('Prime Work desktop smoke', () => {
     }
     await page.locator('.sidebar__footer button').filter({ hasText: 'Settings' }).click()
     await expect(page.getByRole('heading', { name: 'General' })).toBeVisible()
-    await page.getByRole('button', { name: 'Providers', exact: true }).click()
-    await expect(page.getByLabel('Search providers')).toBeVisible()
-    await expect(page.locator('.provider-row')).not.toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Disable all', exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Disable all', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Enable all', exact: true })).toBeVisible()
-    await expect(page.locator('.provider-row input[type="checkbox"]:checked')).toHaveCount(0)
-    await page.getByRole('tab', { name: /Models/ }).click()
-    await expect(page.getByLabel('Search models')).toBeVisible()
-    await expect(page.locator('.provider-model-row')).not.toHaveCount(0)
+    await page.getByRole('button', { name: 'Models', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Add provider' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Add custom provider' })).toBeVisible()
     await page.getByRole('button', { name: 'Harness', exact: true }).click()
     await expect(page.getByRole('checkbox', { name: /Show reasoning summaries/ })).toBeChecked()
     await expect(page.getByRole('checkbox', { name: /Show tool calls/ })).toBeChecked()

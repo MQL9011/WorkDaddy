@@ -1,6 +1,6 @@
 import { PRIME_THINKING_LEVELS, type PrimeModelDescriptor, type PrimeThinkingLevel } from '../../src/types/api'
 import { CliModelCatalogService, validateModelEntry, type CliModelCatalogOptions } from './model-catalog-cli'
-import { runProcess, safeChildEnvironment } from './process-utils'
+import { runProcess, safeChildEnvironment, type ExecutableSource } from './process-utils'
 
 export { MAX_CATALOG_PROVIDERS } from './model-catalog-cli'
 
@@ -20,8 +20,6 @@ function toThinkingLevels(reasoning: boolean, thinking: unknown): PrimeThinkingL
   return PRIME_THINKING_LEVELS.filter((level) => level === 'off' || reported.has(level))
 }
 
-export type OmpModelCatalogOptions = CliModelCatalogOptions
-
 /**
  * Model catalog service for the OMP harness, backed by the `omp models --json`
  * CLI instead of in-process npm modules. Satisfies the same
@@ -31,12 +29,17 @@ export type OmpModelCatalogOptions = CliModelCatalogOptions
  * The CLI output is untrusted: it is byte-bounded, time-bounded, spawned with
  * an argv array and a sanitized environment, and every field is validated
  * before use. A null executable means OMP is not installed; the catalog is
- * then empty with a clear warning.
+ * then empty with a clear warning. Product filtering (TokenCC-only) is gone —
+ * whatever the CLI returns after the user's models.yml is shown.
  */
 export class OmpModelCatalogService extends CliModelCatalogService {
   protected readonly harnessLabel = 'OMP'
   protected readonly notInstalledWarning = OMP_NOT_INSTALLED_WARNING
-  protected readonly credentialsLabel = 'Credentials managed by the omp CLI'
+  protected readonly credentialsLabel = 'API key'
+
+  constructor(executable: ExecutableSource, options: CliModelCatalogOptions = {}) {
+    super(executable, options)
+  }
 
   protected override versionEnvironment(): NodeJS.ProcessEnv {
     return safeChildEnvironment()

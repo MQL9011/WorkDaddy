@@ -10,6 +10,8 @@ import type { SessionService } from './sessions'
 import type { TerminalService } from './terminal'
 import type { UpdateService } from './updates'
 import type { AgentBrowserService } from './browser/agent-service'
+import { getTokenccStatus, saveTokenccApiKey } from './tokencc-omp'
+import { createCustomProvider, deleteCustomProvider, discoverModels, listModelProviders, saveProvider } from './omp-models-settings'
 import { requireExistingPath, requireRecord, requireString, requireWebUrl } from './validation'
 
 interface Services {
@@ -155,6 +157,7 @@ export function registerIpc(services: Services, expectedRendererUrl: string): Ip
   handle('projects:create-worktree', (_event, cwd, branch, harness) => { requireHarness(harness); return services.projects.createWorktree(cwd, branch) })
   handle('projects:add', (_event, harness) => { requireHarness(harness); return services.projects.add() })
   handle('projects:grant-inferred', (_event, path, harness) => { requireHarness(harness); return services.projects.grantInferred(path) })
+  handle('projects:regrant', (_event, path, harness) => { requireHarness(harness); return services.projects.regrant(path) })
   handle('projects:remove', (_event, id, harness) => { requireHarness(harness); return services.projects.remove(id) })
   handle('projects:touch', (_event, id, harness) => { requireHarness(harness); return services.projects.touch(id) })
 
@@ -243,6 +246,31 @@ export function registerIpc(services: Services, expectedRendererUrl: string): Ip
     })
     return providerCatalog()
   })
+
+  handle('providers:save-tokencc-key', async (_event, apiKey) => {
+    const result = await saveTokenccApiKey(apiKey)
+    // Force a catalog refresh so the new key is visible without leaking it back.
+    await providerCatalog(true)
+    return result
+  })
+  handle('providers:tokencc-status', () => getTokenccStatus())
+  handle('providers:list-model-providers', () => listModelProviders())
+  handle('providers:save-provider', async (_event, draft) => {
+    const snapshot = await saveProvider(draft)
+    await providerCatalog(true)
+    return snapshot
+  })
+  handle('providers:create-custom-provider', async (_event, draft) => {
+    const snapshot = await createCustomProvider(draft)
+    await providerCatalog(true)
+    return snapshot
+  })
+  handle('providers:delete-custom-provider', async (_event, providerId) => {
+    const snapshot = await deleteCustomProvider(providerId)
+    await providerCatalog(true)
+    return snapshot
+  })
+  handle('providers:discover-models', (_event, input) => discoverModels(input))
 
   handle('terminal:create', (event, options) => services.terminals.create(event.sender, options))
   handle('terminal:bind-session', (event, terminalId, sessionPath) => services.terminals.bindSession(event.sender, terminalId, sessionPath))

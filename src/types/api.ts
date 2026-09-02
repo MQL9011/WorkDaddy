@@ -61,6 +61,11 @@ export interface ProjectRecord {
   sessionCount: number
   gitBranch?: string
   inferred?: boolean
+  /**
+   * True when the primary folder's persisted identity still matches the live
+   * directory. Inferred projects and stale grants are false until re-granted.
+   */
+  authorized: boolean
 }
 
 export interface SessionRecord {
@@ -230,6 +235,82 @@ export interface PrimeModelCatalog {
   models: PrimeModelDescriptor[]
   providers: PrimeProviderDescriptor[]
   warning?: string
+}
+
+export interface TokenccStatus {
+  configured: boolean
+  deepseek: boolean
+  openai: boolean
+}
+
+export interface TokenccSaveResult {
+  configured: true
+  provider: 'deepseek' | 'openai-codex'
+  family: 'deepseek' | 'openai'
+  defaultModel: string
+  families: { deepseek: boolean; openai: boolean }
+}
+
+export type OmpDiscoverableApi = 'openai-completions' | 'openai-responses'
+export type OmpProviderKind = 'catalog' | 'custom'
+
+export interface OmpCatalogProviderOption {
+  id: string
+  displayName: string
+  defaultModel?: string
+}
+
+export interface OmpModelDraft {
+  id: string
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+}
+
+export interface OmpProviderRow {
+  id: string
+  displayName: string
+  kind: OmpProviderKind
+  configured: boolean
+  keylessAuth: boolean
+  removable: boolean
+  baseUrl?: string
+  api?: string
+  modelsOverridden: boolean
+  models: OmpModelDraft[]
+}
+
+export interface OmpModelsSnapshot {
+  rows: OmpProviderRow[]
+  availableCatalog: OmpCatalogProviderOption[]
+}
+
+export interface DiscoveredModel {
+  id: string
+  name: string
+}
+
+export interface SaveOmpProviderDraft {
+  providerId: string
+  apiKey?: string
+  baseUrl?: string
+  models?: OmpModelDraft[]
+  resetModels?: boolean
+}
+
+export interface CreateOmpProviderDraft {
+  id: string
+  displayName?: string
+  baseUrl: string
+  api: OmpDiscoverableApi
+  apiKey?: string
+  models: OmpModelDraft[]
+}
+
+export interface DiscoverOmpModelsInput {
+  providerId?: string
+  baseUrl: string
+  apiKey?: string
 }
 
 export interface PrimeEventEnvelope {
@@ -508,6 +589,7 @@ export interface PrimeWorkApi {
     createWorktree(cwd: string, branch: string, harness?: HarnessId): Promise<ProjectRecord | null>
     add(harness?: HarnessId): Promise<ProjectRecord | null>
     grantInferred(path: string, harness?: HarnessId): Promise<ProjectRecord>
+    regrant(path: string, harness?: HarnessId): Promise<ProjectRecord>
     remove(id: string, harness?: HarnessId): Promise<boolean>
     touch(id: string, harness?: HarnessId): Promise<boolean>
   }
@@ -530,6 +612,13 @@ export interface PrimeWorkApi {
     setEnabled(providerId: string, enabled: boolean, harness?: HarnessId): Promise<PrimeModelCatalog>
     setDisabled(providerIds: string[], harness?: HarnessId): Promise<PrimeModelCatalog>
     setModelEnabled(modelKey: string, enabled: boolean, harness?: HarnessId): Promise<PrimeModelCatalog>
+    saveTokenccKey(apiKey: string): Promise<TokenccSaveResult>
+    tokenccStatus(): Promise<TokenccStatus>
+    listModelProviders(): Promise<OmpModelsSnapshot>
+    saveProvider(draft: SaveOmpProviderDraft): Promise<OmpModelsSnapshot>
+    createCustomProvider(draft: CreateOmpProviderDraft): Promise<OmpModelsSnapshot>
+    deleteCustomProvider(providerId: string): Promise<OmpModelsSnapshot>
+    discoverModels(input: DiscoverOmpModelsInput): Promise<readonly DiscoveredModel[]>
   }
   terminal: {
     create(options: TerminalSpawnOptions): Promise<{ terminalId: string; shell: string }>

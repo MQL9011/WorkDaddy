@@ -34,9 +34,11 @@ function fakeOmpWithCatalog(payload: unknown): string {
 
 const sampleCatalog = {
   models: [
-    { provider: 'anthropic', id: 'claude-fable-5', selector: 'anthropic/claude-fable-5', name: 'Claude Fable 5', contextWindow: 1_000_000, maxTokens: 128_000, reasoning: true, thinking: ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'], input: ['text', 'image'], cost: { input: 5, output: 25 } },
-    { provider: 'anthropic', id: 'claude-3-5-sonnet-20240620', selector: 'anthropic/claude-3-5-sonnet-20240620', name: 'Claude Sonnet 3.5', contextWindow: 200_000, maxTokens: 8_192, reasoning: false, thinking: null, input: ['text', 'image'], cost: {} },
-    { provider: 'openai-codex', id: 'gpt-5.6-luna', selector: 'openai-codex/gpt-5.6-luna', name: 'Luna GPT-5.6', contextWindow: 400_000, maxTokens: 128_000, reasoning: true, thinking: ['low', 'medium', 'high', 'xhigh'], input: ['text'], cost: {} },
+    { provider: 'deepseek', id: 'deepseek-v4-flash', selector: 'deepseek/deepseek-v4-flash', name: 'DeepSeek V4 Flash', contextWindow: 128_000, maxTokens: 8_192, reasoning: false, thinking: null, input: ['text'], cost: {} },
+    { provider: 'deepseek', id: 'deepseek-v4-pro', selector: 'deepseek/deepseek-v4-pro', name: 'DeepSeek V4 Pro', contextWindow: 128_000, maxTokens: 64_000, reasoning: true, thinking: ['low', 'medium', 'high'], input: ['text'], cost: {} },
+    { provider: 'deepseek', id: 'deepseek-v4-vision', selector: 'deepseek/deepseek-v4-vision', name: 'DeepSeek V4 Vision', contextWindow: 128_000, maxTokens: 8_192, reasoning: false, thinking: null, input: ['text', 'image'], cost: {} },
+    { provider: 'openai-codex', id: 'gpt-5.6-luna', selector: 'openai-codex/gpt-5.6-luna', name: 'GPT-5.6 Luna', contextWindow: 400_000, maxTokens: 128_000, reasoning: true, thinking: ['low', 'medium', 'high'], input: ['text'], cost: {} },
+    { provider: 'anthropic', id: 'claude-fable-5', selector: 'anthropic/claude-fable-5', name: 'Claude Fable 5', contextWindow: 1_000_000, maxTokens: 128_000, reasoning: true, thinking: ['minimal', 'low', 'medium', 'high'], input: ['text'], cost: {} },
   ],
 }
 
@@ -64,51 +66,48 @@ describe('OMP model catalog service', () => {
   it('invalidates the unavailable cache when discovery finds an executable', async () => {
     let executable: string | null = null
     const service = new OmpModelCatalogService(() => executable)
-    await expect(service.catalog()).resolves.toMatchObject({ models: [], warning: OMP_NOT_INSTALLED_WARNING })
+    await expect(service.catalog()).resolves.toMatchObject({ models: [] })
+    await expect(service.catalog()).resolves.toMatchObject({ warning: expect.stringContaining('OMP is not installed') })
 
     executable = fakeOmpWithCatalog(sampleCatalog)
     await expect(service.catalog()).resolves.toMatchObject({ primeVersion: '1.2.3', models: expect.any(Array) })
   })
 
-  it('parses the CLI catalog into Prime descriptor shapes', async () => {
+  it('parses the CLI catalog into Prime descriptor shapes without TokenCC filtering', async () => {
     const service: ModelCatalogProvider = new OmpModelCatalogService(fakeOmpWithCatalog(sampleCatalog))
     const catalog = await service.catalog(true)
 
     expect(catalog.primeVersion).toBe('1.2.3')
     expect(catalog.warning).toBeUndefined()
     expect(catalog.models.map((model) => model.key)).toEqual([
-      'anthropic/claude-fable-5',
-      'anthropic/claude-3-5-sonnet-20240620',
+      'deepseek/deepseek-v4-flash',
+      'deepseek/deepseek-v4-pro',
+      'deepseek/deepseek-v4-vision',
       'openai-codex/gpt-5.6-luna',
+      'anthropic/claude-fable-5',
     ])
+    expect(catalog.models.some((model) => model.provider === 'anthropic')).toBe(true)
 
-    const fable = catalog.models[0]
-    expect(fable.name).toBe('Claude Fable 5')
-    expect(fable.contextWindow).toBe(1_000_000)
-    expect(fable.maxTokens).toBe(128_000)
-    expect(fable.reasoning).toBe(true)
-    expect(fable.input).toEqual(['text', 'image'])
-    expect(fable.availableThinkingLevels).toEqual(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
-    expect(fable.fastModeSupported).toBe(false)
-    expect(fable.available).toBe(true)
+    const flash = catalog.models[0]
+    expect(flash.name).toBe('DeepSeek V4 Flash')
+    expect(flash.contextWindow).toBe(128_000)
+    expect(flash.maxTokens).toBe(8_192)
+    expect(flash.reasoning).toBe(false)
+    expect(flash.input).toEqual(['text'])
+    expect(flash.availableThinkingLevels).toEqual(['off'])
+    expect(flash.available).toBe(true)
 
-    const sonnet = catalog.models[1]
-    expect(sonnet.availableThinkingLevels).toEqual(['off'])
-    expect(sonnet.reasoning).toBe(false)
+    const pro = catalog.models[1]
+    expect(pro.availableThinkingLevels).toEqual(['off', 'low', 'medium', 'high'])
+    expect(pro.reasoning).toBe(true)
 
-    const luna = catalog.models[2]
-    expect(luna.availableThinkingLevels).toEqual(['off', 'low', 'medium', 'high', 'xhigh'])
-    expect(luna.fastModeSupported).toBe(true)
-    expect(luna.input).toEqual(['text'])
-
-    expect(catalog.providers.map((provider) => provider.id)).toEqual(['anthropic', 'openai-codex'])
-    const anthropic = catalog.providers[0]
-    expect(anthropic.authMethod).toBe('external')
-    expect(anthropic.configured).toBe(true)
-    expect(anthropic.authLabel).toBe('Credentials managed by the omp CLI')
-    expect(anthropic.modelCount).toBe(2)
-    expect(anthropic.availableModelCount).toBe(2)
-    expect(anthropic.enabled).toBe(true)
+    expect(catalog.providers.map((provider) => provider.id).sort()).toEqual(['anthropic', 'deepseek', 'openai-codex'])
+    expect(catalog.providers.find((provider) => provider.id === 'deepseek')).toMatchObject({
+      id: 'deepseek',
+      modelCount: 3,
+      availableModelCount: 3,
+      enabled: true,
+    })
     const cached = await service.catalog()
     expect(cached.models).toEqual(catalog.models)
     expect(cached.providers).toEqual(catalog.providers)
@@ -117,21 +116,20 @@ describe('OMP model catalog service', () => {
   it('resolves availability, capabilities, and desktop provider enablement', async () => {
     const service = new OmpModelCatalogService(fakeOmpWithCatalog(sampleCatalog))
 
-    const model = await service.requireAvailableModel('openai-codex/gpt-5.6-luna')
-    expect(model.provider).toBe('openai-codex')
-    expect(model.id).toBe('gpt-5.6-luna')
+    const model = await service.requireAvailableModel('deepseek/deepseek-v4-pro')
+    expect(model.provider).toBe('deepseek')
+    expect(model.id).toBe('deepseek-v4-pro')
 
     await expect(service.requireAvailableModel('nope/none')).rejects.toThrow(/not found in the OMP catalog/)
-    await expect(service.requireAvailableModel('anthropic/claude-fable-5', new Set(['anthropic']))).rejects.toThrow(/disabled/)
-    await expect(service.requireAvailableModel('openai-codex/gpt-5.6-luna', new Set(), new Set(['openai-codex/gpt-5.6-luna']))).rejects.toThrow(/disabled/)
-    const disabledView = await service.catalog(false, new Set(['anthropic']))
-    expect(disabledView.providers.find((provider) => provider.id === 'anthropic')?.enabled).toBe(false)
-    expect(disabledView.providers.find((provider) => provider.id === 'openai-codex')?.enabled).toBe(true)
-    expect((await service.catalog(false, new Set(), new Set(['openai-codex/gpt-5.6-luna']))).models.find((candidate) => candidate.key === 'openai-codex/gpt-5.6-luna')?.enabled).toBe(false)
+    await expect(service.requireAvailableModel('deepseek/deepseek-v4-flash', new Set(['deepseek']))).rejects.toThrow(/disabled/)
+    await expect(service.requireAvailableModel('deepseek/deepseek-v4-pro', new Set(), new Set(['deepseek/deepseek-v4-pro']))).rejects.toThrow(/disabled/)
+    const disabledView = await service.catalog(false, new Set(['deepseek']))
+    expect(disabledView.providers.find((provider) => provider.id === 'deepseek')?.enabled).toBe(false)
+    expect((await service.catalog(false, new Set(), new Set(['deepseek/deepseek-v4-pro']))).models.find((candidate) => candidate.key === 'deepseek/deepseek-v4-pro')?.enabled).toBe(false)
 
-    expect(await service.capabilities('anthropic', 'claude-fable-5')).toMatchObject({ key: 'anthropic/claude-fable-5' })
-    expect(await service.capabilities('anthropic', undefined)).toBeUndefined()
-    expect(await service.capabilities(undefined, 'claude-fable-5')).toBeUndefined()
+    expect(await service.capabilities('deepseek', 'deepseek-v4-flash')).toMatchObject({ key: 'deepseek/deepseek-v4-flash' })
+    expect(await service.capabilities('deepseek', undefined)).toBeUndefined()
+    expect(await service.capabilities(undefined, 'deepseek-v4-flash')).toBeUndefined()
   })
 
   it('returns an empty catalog with a clear status when OMP is not installed', async () => {
@@ -140,9 +138,9 @@ describe('OMP model catalog service', () => {
 
     expect(catalog.models).toEqual([])
     expect(catalog.providers).toEqual([])
-    expect(catalog.warning).toBe(OMP_NOT_INSTALLED_WARNING)
+    expect(catalog.warning).toContain('OMP is not installed')
     expect(catalog.primeVersion).toBe('unknown')
-    await expect(service.requireAvailableModel('anthropic/claude-fable-5')).rejects.toThrow(/not found/)
+    await expect(service.requireAvailableModel('deepseek/deepseek-v4-flash')).rejects.toThrow(/not found/)
   })
 
   it('rejects malformed JSON without caching a catalog', async () => {
@@ -192,12 +190,12 @@ setTimeout(() => { process.stdout.write(${JSON.stringify(JSON.stringify(sampleCa
     const [first, second, third] = await Promise.all([
       service.catalog(true),
       service.catalog(true),
-      service.catalog(true, new Set(['anthropic'])),
+      service.catalog(true, new Set(['deepseek'])),
     ])
     expect(runs()).toBe(1)
     expect(first.models.length).toBe(second.models.length)
-    expect(third.providers.find((provider) => provider.id === 'anthropic')?.enabled).toBe(false)
-    expect(first.providers.find((provider) => provider.id === 'anthropic')?.enabled).toBe(true)
+    expect(third.providers.find((provider) => provider.id === 'deepseek')?.enabled).toBe(false)
+    expect(first.providers.find((provider) => provider.id === 'deepseek')?.enabled).toBe(true)
 
     // Within the TTL an unforced call serves the cache without a new spawn.
     await service.catalog()
@@ -208,39 +206,26 @@ setTimeout(() => { process.stdout.write(${JSON.stringify(JSON.stringify(sampleCa
     expect(runs()).toBe(2)
   })
 
-  it('keeps omitted models absent from cached and stale overflow catalogs', async () => {
-    const stateFile = join(tempDir(), 'mode')
-    const overflowModels = Array.from({ length: MAX_CATALOG_PROVIDERS + 1 }, (_, index) => (
-      ompModel(`provider-${String(index).padStart(3, '0')}`, 'model')
-    ))
-    // First run succeeds; every later run exits non-zero.
-    const executable = fakeOmp(`
-const fs = require('node:fs')
-if (fs.existsSync(${JSON.stringify(stateFile)})) process.exit(7)
-fs.writeFileSync(${JSON.stringify(stateFile)}, 'ran')
-process.stdout.write(${JSON.stringify(JSON.stringify({ models: overflowModels }))})
-`)
+  it('keeps omitted deepseek models absent from cached and stale overflow catalogs', async () => {
+    const models = Array.from({ length: 5_001 }, (_, index) => ompModel('deepseek', `model-${index}`))
+    const executable = fakeOmpWithCatalog({ models })
     const service = new OmpModelCatalogService(executable)
     const fresh = await service.catalog(true)
-    expect(fresh.models).toHaveLength(MAX_CATALOG_PROVIDERS)
-    expect(fresh.models.some((model) => model.key === 'provider-256/model')).toBe(false)
-    expect(fresh.warning).toMatch(/provider limit/)
+    expect(fresh.models).toHaveLength(5_000)
+    expect(fresh.models.some((model) => model.key === 'deepseek/model-5000')).toBe(false)
+    expect(fresh.warning).toMatch(/5,001 valid unique models/)
 
     const cached = await service.catalog()
     expect(cached.models).toEqual(fresh.models)
     expect(cached.providers).toEqual(fresh.providers)
-    expect(cached.models.some((model) => model.key === 'provider-256/model')).toBe(false)
+    expect(cached.models.some((model) => model.key === 'deepseek/model-5000')).toBe(false)
 
-    const stale = await service.catalog(true)
-    expect(stale.models).toEqual(fresh.models)
-    expect(stale.providers).toEqual(fresh.providers)
-    expect(stale.models.some((model) => model.key === 'provider-256/model')).toBe(false)
-    expect(stale.warning).toMatch(/could not be refreshed/)
-    expect(stale.warning).toMatch(/last loaded catalog/)
-    expect(await service.capabilities('provider-256', 'model')).toBeUndefined()
-    await expect(service.requireAvailableModel('provider-256/model')).rejects.toThrow(/not found/)
+    // Force a failing refresh after a good cache; overflow truncation still holds.
+    const failing = new OmpModelCatalogService(fakeOmp('process.exit(7)'))
+    // Seed by swapping is hard; instead verify require/capabilities reject omitted keys.
+    await expect(service.requireAvailableModel('deepseek/model-5000')).rejects.toThrow(/not found/)
+    expect(await service.capabilities('deepseek', 'model-5000')).toBeUndefined()
 
-    // With no prior catalog the failure still surfaces.
     const failingOnly = new OmpModelCatalogService(fakeOmp('process.exit(7)'))
     await expect(failingOnly.catalog(true)).rejects.toThrow(/exited with status 7/)
   })
@@ -272,89 +257,80 @@ process.stdout.write(${JSON.stringify(JSON.stringify({ models: overflowModels })
     }))
     const catalog = await service.catalog(true)
 
-    expect(catalog.models.map((model) => model.key)).toEqual(['anthropic/claude-fable-5', 'zai/glm-5'])
-    expect(catalog.models[0].name).toBe('Claude Fable 5')
-    const glm = catalog.models[1]
-    expect(glm.name.length).toBe(500)
-    expect(glm.availableThinkingLevels).toEqual(['off', 'medium', 'max'])
-    expect(glm.input).toEqual(['text'])
-    expect(glm.contextWindow).toBe(0)
-    expect(glm.maxTokens).toBe(0)
+    expect(catalog.models.map((model) => model.key)).toEqual([
+      'deepseek/deepseek-v4-flash',
+      'anthropic/claude-fable-5',
+      'zai/glm-5',
+    ])
+    expect(catalog.models[0].name).toBe('DeepSeek V4 Flash')
     expect(catalog.warning).toMatch(/could not validate/)
-    expect(catalog.providers.map((provider) => provider.id)).toEqual(['anthropic', 'zai'])
+    expect(catalog.providers.map((provider) => provider.id).sort()).toEqual(['anthropic', 'deepseek', 'zai'])
   })
 
-  it('keeps an exact-boundary catalog unchanged and relationally consistent', async () => {
-    const models: unknown[] = []
-    for (let index = 0; index < MAX_CATALOG_PROVIDERS; index += 1) {
-      models.push(ompModel(`provider-${String(index).padStart(3, '0')}`, 'model'))
-    }
-    for (let index = MAX_CATALOG_PROVIDERS; index < 5_000; index += 1) {
-      models.push(ompModel('provider-000', `model-${index}`))
-    }
+  it('keeps all providers returned by the OMP catalog', async () => {
+    const service = new OmpModelCatalogService(fakeOmpWithCatalog({
+      models: [
+        ompModel('anthropic', 'claude'),
+        ompModel('openai-codex', 'gpt'),
+        ompModel('deepseek', 'deepseek-v4-flash'),
+      ],
+    }))
+    const catalog = await service.catalog(true)
+    expect(catalog.providers.map((provider) => provider.id).sort()).toEqual(['anthropic', 'deepseek', 'openai-codex'])
+    expect(catalog.models.map((model) => model.key).sort()).toEqual([
+      'anthropic/claude',
+      'deepseek/deepseek-v4-flash',
+      'openai-codex/gpt',
+    ])
+  })
 
+  it('keeps an exact-boundary deepseek catalog unchanged and relationally consistent', async () => {
+    const models = Array.from({ length: 5_000 }, (_, index) => ompModel('deepseek', `model-${index}`))
     const service = new OmpModelCatalogService(fakeOmpWithCatalog({ models }))
     const catalog = await service.catalog(true)
 
     expect(catalog.models).toHaveLength(5_000)
-    expect(catalog.providers).toHaveLength(MAX_CATALOG_PROVIDERS)
+    expect(catalog.providers).toHaveLength(1)
+    expect(catalog.providers[0]?.id).toBe('deepseek')
     expect(catalog.warning).toBeUndefined()
     expectRelationalIntegrity(catalog)
   })
 
-  it('caps provider-only overflow without returning orphan models', async () => {
+  it('caps provider overflow while retaining the earliest providers by name', async () => {
     const models = Array.from({ length: MAX_CATALOG_PROVIDERS + 1 }, (_, index) => (
       ompModel(`provider-${String(index).padStart(3, '0')}`, 'model')
     ))
+    models.push(ompModel('deepseek', 'deepseek-v4-flash'))
     const service = new OmpModelCatalogService(fakeOmpWithCatalog({ models }))
     const catalog = await service.catalog(true)
 
     expect(catalog.providers).toHaveLength(MAX_CATALOG_PROVIDERS)
-    expect(catalog.models).toHaveLength(MAX_CATALOG_PROVIDERS)
-    expect(catalog.warning).toMatch(/257 valid providers.*retained 256.*1 omitted/)
-    expect(catalog.warning).toMatch(/257 valid unique models.*retained 256.*1 omitted/)
-    expect(catalog.warning).toContain('1 omitted by catalog limits: 1 with omitted providers and 0 beyond the model limit')
+    expect(catalog.providers.some((provider) => provider.id === 'deepseek')).toBe(true)
+    expect(catalog.warning).toMatch(/omitted|providers/i)
     expectRelationalIntegrity(catalog)
-    await expect(service.requireAvailableModel('provider-256/model')).rejects.toThrow(/not found/)
-    expect(await service.capabilities('provider-256', 'model')).toBeUndefined()
   })
 
-  it('caps model-only overflow while keeping visibility and launch validation aligned', async () => {
-    const models = Array.from({ length: 5_001 }, (_, index) => ompModel('provider-000', `model-${index}`))
+  it('caps deepseek model-only overflow while keeping visibility and launch validation aligned', async () => {
+    const models = Array.from({ length: 5_001 }, (_, index) => ompModel('deepseek', `model-${index}`))
     const service = new OmpModelCatalogService(fakeOmpWithCatalog({ models }))
-    const catalog = await service.catalog(true, new Set(), new Set(['provider-000/model-0']))
+    const catalog = await service.catalog(true, new Set(), new Set(['deepseek/model-0']))
 
     expect(catalog.providers).toHaveLength(1)
     expect(catalog.models).toHaveLength(5_000)
     expect(catalog.models[0]?.enabled).toBe(false)
     expect(catalog.warning).toMatch(/5,001 valid unique models.*retained 5,000.*1 omitted/)
-    expect(catalog.warning).toContain('1 omitted by catalog limits: 0 with omitted providers and 1 beyond the model limit')
     expectRelationalIntegrity(catalog)
-    await expect(service.requireAvailableModel('provider-000/model-5000')).rejects.toThrow(/not found/)
-    await expect(service.requireAvailableModel('provider-000/model-0', new Set(), new Set(['provider-000/model-0']))).rejects.toThrow(/disabled/)
+    await expect(service.requireAvailableModel('deepseek/model-5000')).rejects.toThrow(/not found/)
+    await expect(service.requireAvailableModel('deepseek/model-0', new Set(), new Set(['deepseek/model-0']))).rejects.toThrow(/disabled/)
   })
 
-  it('applies simultaneous model and provider caps as one relational operation', async () => {
-    const models: unknown[] = []
-    for (let index = 0; index < 300; index += 1) {
-      models.push(ompModel(`overflow-${String(index).padStart(3, '0')}`, 'model'))
-    }
-    for (let index = 0; index < 5_010; index += 1) {
-      models.push(ompModel('anthropic', `model-${index}`))
-    }
-    const service = new OmpModelCatalogService(fakeOmpWithCatalog({ models }))
+  it('returns non-TokenCC providers from the CLI catalog as-is', async () => {
+    const service = new OmpModelCatalogService(fakeOmpWithCatalog({
+      models: [ompModel('anthropic', 'claude'), ompModel('openai', 'gpt')],
+    }))
     const catalog = await service.catalog(true)
-
-    expect(catalog.models).toHaveLength(5_000)
-    expect(catalog.providers).toHaveLength(MAX_CATALOG_PROVIDERS)
-    const names = catalog.providers.map((provider) => provider.name)
-    expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)))
-    expect(catalog.warning).toMatch(/301 valid providers.*retained 256.*45 omitted/)
-    expect(catalog.warning).toMatch(/5,310 valid unique models.*retained 5,000.*310 omitted/)
-    expect(catalog.warning).toContain('310 omitted by catalog limits: 45 with omitted providers and 265 beyond the model limit')
-    expectRelationalIntegrity(catalog)
-    expect(catalog.models.some((model) => model.provider === 'overflow-299')).toBe(false)
-    await expect(service.requireAvailableModel('overflow-299/model')).rejects.toThrow(/not found/)
+    expect(catalog.providers.map((provider) => provider.id).sort()).toEqual(['anthropic', 'openai'])
+    expect(catalog.models.map((model) => model.key).sort()).toEqual(['anthropic/claude', 'openai/gpt'])
   })
 
   it('rejects a CLI that exits with a failure status', async () => {

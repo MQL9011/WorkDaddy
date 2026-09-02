@@ -1,8 +1,18 @@
-import { AlertTriangle, Check, Download, FolderOpen, ShieldCheck, Sparkles, Terminal as TerminalIcon } from 'lucide-react'
-import { useState } from 'react'
+import { AlertTriangle, Check, Download, FolderOpen, KeyRound, ShieldCheck, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n, type MessageKey } from '@/lib/i18n'
-import type { AppMeta, AppSettings, InstalledOmp, OmpApprovalMode, OmpInstallPhase, ProjectRecord } from '@/types/api'
+import type {
+  AppMeta,
+  AppSettings,
+  InstalledOmp,
+  OmpApprovalMode,
+  OmpCatalogProviderOption,
+  OmpInstallPhase,
+  OmpModelsSnapshot,
+  ProjectRecord,
+  SaveOmpProviderDraft,
+} from '@/types/api'
 import { useFocusTrap } from '../ui'
 
 type WizardStep = 'welcome' | 'omp' | 'workspace' | 'approval' | 'login'
@@ -36,25 +46,63 @@ export interface OnboardingWizardProps {
   onAddProject(): Promise<ProjectRecord | null>
   onOpenTerminal(): void
   onOpenHarnessSettings(): void
+  onSaveProvider(draft: SaveOmpProviderDraft): Promise<OmpModelsSnapshot>
+  onListModelProviders?(): Promise<OmpModelsSnapshot>
   onFinish(): void
 }
 
-export function OnboardingWizard({ meta, settings, hasProject, onUpdateSettings, onRefreshHarnesses, onInstallOmp, onSubscribeInstallProgress, onAddProject, onOpenTerminal, onOpenHarnessSettings, onFinish }: OnboardingWizardProps) {
+export function OnboardingWizard({
+  meta,
+  settings,
+  hasProject,
+  onUpdateSettings,
+  onRefreshHarnesses,
+  onInstallOmp,
+  onSubscribeInstallProgress,
+  onAddProject,
+  onOpenTerminal,
+  onOpenHarnessSettings,
+  onSaveProvider,
+  onListModelProviders,
+  onFinish,
+}: OnboardingWizardProps) {
   const { t } = useI18n()
   const ompDetected = Boolean(meta?.harnesses.omp.path)
   const [step, setStep] = useState<WizardStep>('welcome')
   const [installState, setInstallState] = useState<'idle' | OmpInstallPhase | 'done' | 'error'>('idle')
   const [installError, setInstallError] = useState('')
   const [projectError, setProjectError] = useState('')
+  const [providerOptions, setProviderOptions] = useState<OmpCatalogProviderOption[]>([])
+  const [selectedProviderId, setSelectedProviderId] = useState('deepseek')
+  const [apiKey, setApiKey] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [loginSaving, setLoginSaving] = useState(false)
+  const [hasUsableProvider, setHasUsableProvider] = useState(false)
   const [approvalMode, setApprovalMode] = useState<Exclude<OmpApprovalMode, 'inherit'>>(
     settings.ompApprovalMode === 'inherit' ? 'always-ask' : settings.ompApprovalMode,
   )
   const dialogRef = useFocusTrap<HTMLDivElement>(true)
   const installing = installState !== 'idle' && installState !== 'done' && installState !== 'error'
+  const steps = hasUsableProvider ? STEP_ORDER.filter((candidate) => candidate !== 'login') : STEP_ORDER
+
+  useEffect(() => {
+    if (!onListModelProviders) return
+    let cancelled = false
+    void onListModelProviders().then((snapshot) => {
+      if (cancelled) return
+      setHasUsableProvider(snapshot.rows.some((row) => row.configured || row.keylessAuth))
+      const options = snapshot.availableCatalog.length
+        ? snapshot.availableCatalog
+        : snapshot.rows.filter((row) => row.kind === 'catalog').map((row) => ({ id: row.id, displayName: row.displayName }))
+      setProviderOptions(options)
+      setSelectedProviderId((current) => (options.some((option) => option.id === current) ? current : (options[0]?.id ?? current)))
+    }).catch(() => undefined)
+    return () => { cancelled = true }
+  }, [onListModelProviders])
 
   const advance = () => {
-    const index = STEP_ORDER.indexOf(step)
-    setStep(STEP_ORDER[Math.min(index + 1, STEP_ORDER.length - 1)])
+    const index = steps.indexOf(step)
+    setStep(steps[Math.min(index + 1, steps.length - 1)])
   }
 
   const startInstall = async () => {
@@ -85,12 +133,22 @@ export function OnboardingWizard({ meta, settings, hasProject, onUpdateSettings,
 
   const saveApprovalMode = async () => {
     await onUpdateSettings({ ompApprovalMode: approvalMode })
-    advance()
+    if (hasUsableProvider) onFinish()
+    else advance()
   }
 
-  const finishAtTerminal = () => {
-    onOpenTerminal()
-    onFinish()
+  const saveLoginKey = async () => {
+    setLoginError('')
+    setLoginSaving(true)
+    try {
+      await onSaveProvider({ providerId: selectedProviderId, apiKey })
+      setApiKey('')
+      onFinish()
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : t('onboarding.login.saveErrorFallback'))
+    } finally {
+      setLoginSaving(false)
+    }
   }
 
   return createPortal(
@@ -98,7 +156,7 @@ export function OnboardingWizard({ meta, settings, hasProject, onUpdateSettings,
       <section ref={dialogRef} className="onboarding" role="dialog" aria-modal="true" aria-label={t('onboarding.dialogAria')}>
         <button type="button" className="onboarding__skip" onClick={onFinish}>{t('onboarding.skipSetup')}</button>
         <div className="onboarding__steps" aria-hidden="true">
-          {STEP_ORDER.map((candidate) => <span key={candidate} className={candidate === step ? 'is-active' : STEP_ORDER.indexOf(candidate) < STEP_ORDER.indexOf(step) ? 'is-done' : ''} />)}
+          {steps.map((candidate) => <span key={candidate} className={candidate === step ? 'is-active' : steps.indexOf(candidate) < steps.indexOf(step) ? 'is-done' : ''} />)}
         </div>
 
         {step === 'welcome' ? (
@@ -187,12 +245,41 @@ export function OnboardingWizard({ meta, settings, hasProject, onUpdateSettings,
 
         {step === 'login' ? (
           <div className="onboarding__step">
-            <TerminalIcon size={30} className="onboarding__icon" />
+            <KeyRound size={30} className="onboarding__icon" />
             <h1>{t('onboarding.login.title')}</h1>
-            <p>{t('onboarding.login.prefix')} <code className="mono">omp</code>{t('onboarding.login.middle')} <code className="mono">/login</code> {t('onboarding.login.suffix')}</p>
+            <p>{t('onboarding.login.description')}</p>
+            <label className="onboarding__field">
+              <span>{t('onboarding.login.providerLabel')}</span>
+              <select
+                value={selectedProviderId}
+                disabled={loginSaving || providerOptions.length === 0}
+                onChange={(event) => setSelectedProviderId(event.target.value)}
+              >
+                {(providerOptions.length ? providerOptions : [{ id: 'deepseek', displayName: 'DeepSeek' }]).map((option) => (
+                  <option key={option.id} value={option.id}>{option.displayName}</option>
+                ))}
+              </select>
+            </label>
+            <label className="onboarding__field">
+              <span>{t('onboarding.login.keyLabel')}</span>
+              <input
+                type="password"
+                autoComplete="off"
+                spellCheck={false}
+                autoFocus
+                value={apiKey}
+                placeholder={t('onboarding.login.keyPlaceholder')}
+                onChange={(event) => setApiKey(event.target.value)}
+                onKeyDown={(event) => { if (event.key === 'Enter' && apiKey.trim() && !loginSaving) void saveLoginKey() }}
+              />
+            </label>
+            {loginError ? <p className="page-inline-error" role="alert"><AlertTriangle size={13} /> {loginError}</p> : null}
+            <p className="onboarding__hint">{t('onboarding.login.advancedHint')}</p>
             <div className="onboarding__actions">
-              <button type="button" className="button" onClick={onFinish}>{t('onboarding.login.later')}</button>
-              <button type="button" className="button button--primary" autoFocus onClick={finishAtTerminal}>{t('onboarding.login.openTerminal')}</button>
+              <button type="button" className="button" onClick={onFinish} disabled={loginSaving}>{t('onboarding.login.later')}</button>
+              <button type="button" className="button button--primary" disabled={!apiKey.trim() || loginSaving} onClick={() => void saveLoginKey()}>
+                {loginSaving ? t('onboarding.login.saving') : t('onboarding.login.saveAndContinue')}
+              </button>
             </div>
           </div>
         ) : null}

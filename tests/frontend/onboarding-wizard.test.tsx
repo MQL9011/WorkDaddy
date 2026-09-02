@@ -3,7 +3,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OnboardingWizard, type OnboardingWizardProps } from '../../src/components/onboarding/OnboardingWizard'
-import type { AppMeta, AppSettings, InstalledOmp, OmpInstallPhase, ProjectRecord } from '../../src/types/api'
+import type { AppMeta, AppSettings, InstalledOmp, OmpInstallPhase, OmpModelsSnapshot, ProjectRecord } from '../../src/types/api'
 import { DEFAULT_SETTINGS } from '../../src/lib/data'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -43,6 +43,8 @@ describe('OnboardingWizard', () => {
       onAddProject={props.onAddProject ?? (async () => null)}
       onOpenTerminal={props.onOpenTerminal ?? (() => undefined)}
       onOpenHarnessSettings={props.onOpenHarnessSettings ?? (() => undefined)}
+      onSaveProvider={props.onSaveProvider ?? (async () => ({ rows: [], availableCatalog: [{ id: 'deepseek', displayName: 'DeepSeek', defaultModel: 'deepseek/deepseek-chat' }] }))}
+      onListModelProviders={props.onListModelProviders}
       onFinish={props.onFinish ?? (() => undefined)}
     />)
   })
@@ -74,10 +76,9 @@ describe('OnboardingWizard', () => {
     await act(async () => findButton('Continue').click())
     expect(onUpdateSettings).toHaveBeenCalledWith({ ompApprovalMode: 'always-ask' })
 
-    expect(document.body.textContent).toContain('Sign in to omp')
-    await act(async () => findButton('Open terminal and finish').click())
-    expect(onOpenTerminal).toHaveBeenCalledOnce()
-    expect(onFinish).toHaveBeenCalledOnce()
+    expect(document.body.textContent).toContain('Add an API key to get started')
+    expect(document.body.querySelector('input[type="password"]')).toBeTruthy()
+    expect(findButton('Save and continue').disabled).toBe(true)
   })
 
   it('downloads omp, reports progress phases, and refreshes discovery on success', async () => {
@@ -140,7 +141,7 @@ describe('OnboardingWizard', () => {
     expect(onAddProject).toHaveBeenCalledOnce()
     expect(document.body.textContent).toContain('Choose a folder to work in')
 
-    onAddProject.mockResolvedValueOnce({ id: 'p1', name: 'demo', path: '/demo', folders: ['/demo'], primaryFolder: '/demo', sessionCount: 0, createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', harness: 'omp', pinned: false, inferred: false })
+    onAddProject.mockResolvedValueOnce({ id: 'p1', name: 'demo', path: '/demo', folders: ['/demo'], primaryFolder: '/demo', sessionCount: 0, createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', harness: 'omp', pinned: false, inferred: false, authorized: true })
     await act(async () => findButton('Choose a folder').click())
     expect(document.body.textContent).toContain('How much should omp do on its own?')
   })
@@ -154,7 +155,7 @@ describe('OnboardingWizard', () => {
     await act(async () => findButton('Continue').click())
     await act(async () => findButton('Continue').click())
 
-    await act(async () => findButton("I'll do this later").click())
+    await act(async () => findButton('Configure later').click())
     expect(onOpenTerminal).not.toHaveBeenCalled()
     expect(onFinish).toHaveBeenCalledOnce()
   })
@@ -165,4 +166,88 @@ describe('OnboardingWizard', () => {
     await act(async () => findButton('Skip setup').click())
     expect(onFinish).toHaveBeenCalledOnce()
   })
+
+  it('saves a provider key from the login step and finishes', async () => {
+    const onSaveProvider = vi.fn(async (draft) => {
+      expect(draft).toEqual({ providerId: 'deepseek', apiKey: 'sk-test-onboarding' })
+      return {
+        rows: [{ id: 'deepseek', displayName: 'DeepSeek', kind: 'catalog' as const, configured: true, keylessAuth: false, removable: true, modelsOverridden: false, models: [] }],
+        availableCatalog: [],
+      }
+    })
+    const onFinish = vi.fn()
+    await render({
+      meta: meta({ path: '/usr/local/bin/omp', version: '17.3.5' }),
+      hasProject: true,
+      onSaveProvider,
+      onListModelProviders: async () => ({
+        rows: [],
+        availableCatalog: [{ id: 'deepseek', displayName: 'DeepSeek', defaultModel: 'deepseek/deepseek-chat' }],
+      }),
+      onFinish,
+    })
+    await act(async () => { await Promise.resolve() })
+    await act(async () => findButton('Get started').click())
+    await act(async () => findButton('Continue').click())
+    await act(async () => findButton('Continue').click())
+    await act(async () => findButton('Continue').click())
+
+    expect(document.body.textContent).toContain('Add an API key to get started')
+    const input = document.body.querySelector('input[type="password"]') as HTMLInputElement
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, 'sk-test-onboarding')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => findButton('Save and continue').click())
+    expect(onSaveProvider).toHaveBeenCalledWith({ providerId: 'deepseek', apiKey: 'sk-test-onboarding' })
+    expect(onFinish).toHaveBeenCalledOnce()
+  })
+
+  it('shows an error when provider key save fails', async () => {
+    const onSaveProvider = vi.fn(async () => { throw new Error('Key rejected') })
+    const onFinish = vi.fn()
+    await render({ meta: meta({ path: '/usr/local/bin/omp', version: '17.3.5' }), hasProject: true, onSaveProvider, onFinish })
+    await act(async () => findButton('Get started').click())
+    await act(async () => findButton('Continue').click())
+    await act(async () => findButton('Continue').click())
+    await act(async () => findButton('Continue').click())
+
+    const input = document.body.querySelector('input[type="password"]') as HTMLInputElement
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, 'sk-bad')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await act(async () => findButton('Save and continue').click())
+    expect(document.body.textContent).toContain('Key rejected')
+    expect(onFinish).not.toHaveBeenCalled()
+  })
+
+  it('skips the login step when a provider is already usable', async () => {
+    const onFinish = vi.fn()
+    const snapshot: OmpModelsSnapshot = {
+      rows: [
+        { id: 'deepseek', displayName: 'DeepSeek', kind: 'catalog', configured: true, keylessAuth: false, removable: true, modelsOverridden: false, models: [] },
+      ],
+      availableCatalog: [],
+    }
+    await render({
+      meta: meta({ path: '/usr/local/bin/omp', version: '17.3.5' }),
+      hasProject: true,
+      onFinish,
+      onListModelProviders: async () => snapshot,
+    })
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await Promise.resolve() })
+    await act(async () => findButton('Get started').click())
+    await act(async () => findButton('Continue').click())
+    await act(async () => findButton('Continue').click())
+    await act(async () => findButton('Continue').click())
+    expect(onFinish).toHaveBeenCalledOnce()
+    expect(document.body.textContent).not.toContain('Add an API key to get started')
+  })
+
 })

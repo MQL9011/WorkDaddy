@@ -185,6 +185,76 @@ describe('workspace runtime abort ownership', () => {
   })
 })
 
+describe('workspace project grant policy', () => {
+  const baseProject = {
+    id: 'project',
+    harness: 'omp' as const,
+    name: 'Project',
+    path: '/project',
+    folders: ['/project'],
+    primaryFolder: '/project',
+    pinned: false,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    lastOpenedAt: '2026-01-01T00:00:00.000Z',
+    sessionCount: 1,
+  }
+
+  it('skips IPC for already-authorized projects', async () => {
+    const grantInferred = vi.fn()
+    const regrant = vi.fn()
+    const actions = createWorkspaceActions(() => ({
+      bridge: { projects: { grantInferred, regrant }, git: { status: vi.fn() } },
+      workspace: { workspaceRef: { current: { generation: 1 } } },
+      setProjects: vi.fn(),
+      gitRequestRef: { current: 0 },
+      setGitSnapshot: vi.fn(),
+    } as unknown as WorkspaceActionsDeps))
+
+    const project = { ...baseProject, authorized: true, inferred: false }
+    await expect(actions.grantProject(project)).resolves.toBe(project)
+    expect(grantInferred).not.toHaveBeenCalled()
+    expect(regrant).not.toHaveBeenCalled()
+  })
+
+  it('regrants persisted projects whose folder identity went stale', async () => {
+    const refreshed = { ...baseProject, authorized: true, inferred: false }
+    const grantInferred = vi.fn()
+    const regrant = vi.fn(async () => refreshed)
+    const setProjects = vi.fn()
+    const actions = createWorkspaceActions(() => ({
+      bridge: { projects: { grantInferred, regrant }, git: { status: vi.fn(async () => ({ isRepo: false, files: [] })) } },
+      workspace: { workspaceRef: { current: { generation: 1, project: { ...baseProject, authorized: false } } } },
+      setProjects,
+      gitRequestRef: { current: 0 },
+      setGitSnapshot: vi.fn(),
+    } as unknown as WorkspaceActionsDeps))
+
+    const stale = { ...baseProject, authorized: false, inferred: false }
+    await expect(actions.grantProject(stale)).resolves.toEqual(refreshed)
+    expect(regrant).toHaveBeenCalledWith('/project', 'omp')
+    expect(grantInferred).not.toHaveBeenCalled()
+    expect(setProjects).toHaveBeenCalled()
+  })
+
+  it('grants inferred projects instead of regranting', async () => {
+    const granted = { ...baseProject, authorized: true, inferred: false }
+    const grantInferred = vi.fn(async () => granted)
+    const regrant = vi.fn()
+    const actions = createWorkspaceActions(() => ({
+      bridge: { projects: { grantInferred, regrant }, git: { status: vi.fn(async () => ({ isRepo: false, files: [] })) } },
+      workspace: { workspaceRef: { current: { generation: 1 } } },
+      setProjects: vi.fn(),
+      gitRequestRef: { current: 0 },
+      setGitSnapshot: vi.fn(),
+    } as unknown as WorkspaceActionsDeps))
+
+    const inferred = { ...baseProject, authorized: false, inferred: true }
+    await expect(actions.grantProject(inferred)).resolves.toEqual(granted)
+    expect(grantInferred).toHaveBeenCalledWith('/project', 'omp')
+    expect(regrant).not.toHaveBeenCalled()
+  })
+})
+
 describe('workspace MCP command policy', () => {
   it.each([
     ['omp', '/mcp reauth docs', 'OMP', 'docs'],

@@ -333,6 +333,7 @@ export class ProjectService {
         pinned: project.pinned, createdAt: project.createdAt, lastOpenedAt: project.lastOpenedAt,
         sessionCount,
         gitBranch: undefined,
+        authorized: primaryGranted,
       }
       records.push(record)
       if (primaryGranted) branchTargets.push({ record, cwd: project.primaryFolder })
@@ -369,6 +370,7 @@ export class ProjectService {
         sessionCount: stats?.count ?? 0,
         gitBranch: undefined,
         inferred: true,
+        authorized: false,
       })
     }
     // Branch enrichment runs after the swap: authorization must never wait on
@@ -389,7 +391,14 @@ export class ProjectService {
   }
 
   async listWorktrees(cwdValue: unknown): Promise<GitWorktree[]> {
-    const cwd = await this.authorizeCwd(requireString(cwdValue, 'cwd', { min: 1, max: 4096 }))
+    const requested = requireString(cwdValue, 'cwd', { min: 1, max: 4096 })
+    let cwd: string
+    try { cwd = await this.authorizeCwd(requested) }
+    catch {
+      // Stale persisted projects still appear in list() with authorized:false;
+      // soft-fail so startup does not spam IPC errors for worktree probes.
+      return []
+    }
     try { return await listGitWorktrees(cwd) }
     catch (error) {
       if (isNotARepositoryFailure(error)) return []
@@ -432,7 +441,23 @@ export class ProjectService {
     this.authorizationRevision += 1
     this.authorizedRoots.set(path, identity)
     const sessions = knownSessions ?? await this.sessionProvider()
-    return { ...project, sessionCount: sessions.filter((session) => resolve(session.projectPath) === path).length, gitBranch: await this.branchProvider(path) }
+    return {
+      ...project,
+      sessionCount: sessions.filter((session) => resolve(session.projectPath) === path).length,
+      gitBranch: await this.branchProvider(path),
+      authorized: true,
+    }
+  }
+
+  /**
+   * Re-captures folder identity for a persisted (or newly chosen) path and
+   * refreshes the grant. Used when a listed project has authorized:false
+   * because the directory was remounted or replaced.
+   */
+  async regrant(pathValue: unknown): Promise<ProjectRecord> {
+    const { path, identity } = await this.captureFolderIdentity(String(pathValue))
+    if (await this.isBroadRoot(path)) throw new TypeError('Broad filesystem roots cannot be added as projects')
+    return this.grantProjectFolder(path, identity)
   }
 
   private async persistWorktree(path: string, identity: FolderIdentity): Promise<ProjectRecord> {

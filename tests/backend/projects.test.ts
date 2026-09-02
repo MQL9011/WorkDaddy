@@ -534,6 +534,12 @@ describe('ProjectService file listing', () => {
 
     await expect(service.authorizeCwd(root)).rejects.toThrow(/identity changed/)
     expect(store.snapshot().projects[0].folderIdentities?.[realpathSync(root)]).toEqual(replaced)
+    const listed = await service.list()
+    expect(listed.find((project) => project.id === 'replaced')).toMatchObject({ authorized: false })
+    await expect(service.listWorktrees(root)).resolves.toEqual([])
+    const regranted = await service.regrant(root)
+    expect(regranted).toMatchObject({ authorized: true, primaryFolder: realpathSync(root) })
+    await expect(service.authorizeCwd(root)).resolves.toBe(realpathSync(root))
   })
 
   it('revokes a grant when its directory is replaced by a symlink, including after restart', async () => {

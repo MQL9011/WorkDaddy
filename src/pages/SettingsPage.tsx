@@ -4,7 +4,7 @@ import { errorMessage } from '@/lib/errors'
 import { useI18n, type MessageKey } from '@/lib/i18n'
 import { detectRendererPlatform } from '@/lib/platform-shortcuts'
 import { BrowserGlobe, Modal } from '@/components/ui'
-import type { AppMeta, AppSettings, PrimeModelCatalog } from '@/types/api'
+import type { AppMeta, AppSettings, CreateOmpProviderDraft, DiscoveredModel, DiscoverOmpModelsInput, OmpModelsSnapshot, PrimeModelCatalog, SaveOmpProviderDraft } from '@/types/api'
 import { AboutSettings } from './settings/AboutSettings'
 import { AgentSettings } from './settings/AgentSettings'
 import { AppearanceSettings } from './settings/AppearanceSettings'
@@ -19,7 +19,7 @@ const sections: Array<{ id: SettingsSection; label: MessageKey; icon: ComponentT
   { id: 'general', label: 'settings.general', icon: Settings2 },
   { id: 'appearance', label: 'settings.appearance', icon: Sun },
   { id: 'agent', label: 'settings.harness', icon: Bot },
-  { id: 'providers', label: 'settings.providers', icon: Boxes },
+  { id: 'providers', label: 'settings.models', icon: Boxes },
   { id: 'browser', label: 'settings.browser', icon: BrowserGlobe },
   { id: 'terminal', label: 'settings.terminal', icon: Terminal },
   { id: 'privacy', label: 'settings.privacy', icon: LockKeyhole },
@@ -39,12 +39,17 @@ interface SettingsPageProps {
   onSetAllProvidersEnabled(): Promise<void>
   onSetAllProvidersDisabled(): Promise<void>
   onSetModelEnabled(modelKey: string, enabled: boolean): Promise<void>
+  onListModelProviders(): Promise<OmpModelsSnapshot>
+  onSaveProvider(draft: SaveOmpProviderDraft): Promise<OmpModelsSnapshot>
+  onCreateCustomProvider(draft: CreateOmpProviderDraft): Promise<OmpModelsSnapshot>
+  onDeleteCustomProvider(providerId: string): Promise<OmpModelsSnapshot>
+  onDiscoverModels(input: DiscoverOmpModelsInput): Promise<readonly DiscoveredModel[]>
   initialSection?: SettingsSection
   /** Re-applies initialSection for repeated navigation requests to the same section. */
   initialSectionRequestId?: number
 }
 
-export function SettingsPage({ settings, meta, providerCatalog, onUpdate, onResetBrowser, onOpenDocs, onRefreshProviders, onRefreshHarnesses, onSetProviderEnabled, onSetAllProvidersEnabled, onSetAllProvidersDisabled, onSetModelEnabled, initialSection = 'general', initialSectionRequestId = 0 }: SettingsPageProps) {
+export function SettingsPage({ settings, meta, providerCatalog, onUpdate, onResetBrowser, onOpenDocs, onRefreshProviders, onRefreshHarnesses, onSetProviderEnabled, onSetAllProvidersEnabled, onSetAllProvidersDisabled, onSetModelEnabled, onListModelProviders, onSaveProvider, onCreateCustomProvider, onDeleteCustomProvider, onDiscoverModels, initialSection = 'general', initialSectionRequestId = 0 }: SettingsPageProps) {
   const [section, setSection] = useState<SettingsSection>(initialSection)
   const [confirmReset, setConfirmReset] = useState(false)
   const [resetting, setResetting] = useState(false)
@@ -72,7 +77,7 @@ export function SettingsPage({ settings, meta, providerCatalog, onUpdate, onRese
       case 'general': return <GeneralSettings settings={settings} onUpdate={onUpdate} platform={platform} />
       case 'appearance': return <AppearanceSettings settings={settings} onUpdate={onUpdate} />
       case 'agent': return <AgentSettings settings={settings} meta={meta} onUpdate={onUpdate} onRefreshHarnesses={onRefreshHarnesses} />
-      case 'providers': return <ProvidersSettings harness={settings.activeHarness} catalog={providerCatalog} onRefresh={onRefreshProviders} onSetEnabled={onSetProviderEnabled} onSetAllEnabled={onSetAllProvidersEnabled} onSetAllDisabled={onSetAllProvidersDisabled} onSetModelEnabled={onSetModelEnabled} onOpenDocs={onOpenDocs} />
+      case 'providers': return <ProvidersSettings harness={settings.activeHarness} catalog={providerCatalog} onRefresh={onRefreshProviders} onSetEnabled={onSetProviderEnabled} onSetAllEnabled={onSetAllProvidersEnabled} onSetAllDisabled={onSetAllProvidersDisabled} onSetModelEnabled={onSetModelEnabled} onListModelProviders={onListModelProviders} onSaveProvider={onSaveProvider} onCreateCustomProvider={onCreateCustomProvider} onDeleteCustomProvider={onDeleteCustomProvider} onDiscoverModels={onDiscoverModels} onOpenDocs={onOpenDocs} />
       case 'browser': return <BrowserSettings settings={settings} onUpdate={onUpdate} onRequestReset={() => { setResetError(''); setConfirmReset(true) }} />
       case 'terminal': return <TerminalSettings settings={settings} onUpdate={onUpdate} platform={platform} />
       case 'privacy': return <PrivacySettings settings={settings} onUpdate={onUpdate} />

@@ -18,8 +18,7 @@ const project = (id: string, folders: string[], pinned = false): ProjectRecord =
   pinned,
   createdAt: '2025-01-01T00:00:00.000Z',
   lastOpenedAt: '2025-01-01T00:00:00.000Z',
-  sessionCount: 1,
-})
+  sessionCount: 1, authorized: true })
 
 const session = (id: string, projectPath: string, filePath: string): SessionRecord => ({
   id,

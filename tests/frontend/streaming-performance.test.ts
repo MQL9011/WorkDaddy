@@ -131,8 +131,7 @@ describe('Sidebar memoization and scale bounds', () => {
   it('indexes 5,000 sessions once and bounds rendered rows per project', () => {
     const project: ProjectRecord = {
       id: 'large', harness: 'omp', name: 'Large', path: '/large', folders: ['/large'], primaryFolder: '/large',
-      pinned: false, createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 5_000,
-    }
+      pinned: false, createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 5_000, authorized: true }
     const sessions: SessionRecord[] = Array.from({ length: 5_000 }, (_, index) => ({
       id: `session-${index}`, harness: 'omp' as const, projectPath: '/large', filePath: `/sessions/${index}.jsonl`, title: `Session ${index}`,
       createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0,

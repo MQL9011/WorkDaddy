@@ -256,12 +256,12 @@ export default function App() {
   const refreshGit = useCallback(async () => {
     const requestId = ++gitRequestRef.current
     const cwd = activeCwd
-    if (!bridge || !cwd || activeProject?.inferred) { setGitSnapshot({ cwd, status: { isRepo: false, files: [] } }); return }
+    if (!bridge || !cwd || activeProject?.inferred || activeProject?.authorized === false) { setGitSnapshot({ cwd, status: { isRepo: false, files: [] } }); return }
     try {
       const next = await bridge.git.status(cwd)
       if (gitRequestRef.current === requestId && workspace.workspaceRef.current.cwd === cwd) setGitSnapshot({ cwd, status: next })
     } catch (error) { if (gitRequestRef.current === requestId && workspace.workspaceRef.current.cwd === cwd) reportError(error) }
-  }, [activeCwd, activeProject?.inferred, bridge, reportError, workspace.workspaceRef])
+  }, [activeCwd, activeProject?.authorized, activeProject?.inferred, bridge, reportError, workspace.workspaceRef])
 
   useAgentEvents({
     bridge, runtimeIdRef: workspace.runtimeIdRef, runtimeSessionsRef: workspace.runtimeSessionsRef,
@@ -278,7 +278,7 @@ export default function App() {
   const refreshWorktrees = useCallback(async () => {
     const requestId = ++worktreeRequestRef.current
     const cwd = activeProject?.primaryFolder
-    if (!bridge || !cwd || activeProject.inferred) { setWorktrees([]); setWorktreesLoading(false); return }
+    if (!bridge || !cwd || activeProject.inferred || !activeProject.authorized) { setWorktrees([]); setWorktreesLoading(false); return }
     setWorktreesLoading(true)
     try {
       const next = await bridge.projects.listWorktrees(cwd, activeProject.harness)
@@ -288,7 +288,7 @@ export default function App() {
     } finally {
       if (worktreeRequestRef.current === requestId) setWorktreesLoading(false)
     }
-  }, [activeProject?.harness, activeProject?.inferred, activeProject?.primaryFolder, bridge, reportError])
+  }, [activeProject?.authorized, activeProject?.harness, activeProject?.inferred, activeProject?.primaryFolder, bridge, reportError])
   useEffect(() => { void refreshWorktrees(); return () => { worktreeRequestRef.current += 1 } }, [refreshWorktrees])
   const previousSessionStatusRef = useRef<SessionRecord['status'] | undefined>(undefined)
   const activeSessionStatus = activeSession?.status
@@ -325,7 +325,7 @@ export default function App() {
   }, [agentBrowser.activityEvent, activeRuntimeSessionFile, activeSessionFilePath, settingsState.setInspectorOpen, settingsState.selectInspectorTab])
   useEffect(() => { if (!activeAgentTabs.length) setAgentPreviewSelected(true) }, [activeAgentTabs.length])
   const agentTabVisible = view === 'session' && settingsState.inspectorOpen && settingsState.inspectorTab === 'browser' && !agentPreviewSelected && activeAgentTabId !== null
-  const pluginScope = activeProject?.primaryFolder && !activeProject.inferred ? activeProject.primaryFolder : undefined
+  const pluginScope = activeProject?.primaryFolder && !activeProject.inferred && activeProject.authorized ? activeProject.primaryFolder : undefined
   const pluginSkills = usePluginSkills({ bridge, harness: activeHarness, scope: pluginScope, generation: workspace.workspaceGeneration, initialSkills: bridge ? [] : SAMPLE_SKILLS, reportError })
   useEffect(() => () => { demoTimerRef.current.forEach(window.clearTimeout) }, [])
 
@@ -386,7 +386,7 @@ export default function App() {
       return
     }
     if (!activeProject || !activeCwd) return
-    if (activeProject.inferred) {
+    if (activeProject.inferred || !activeProject.authorized) {
       try { await grantProject(activeProject) } catch (error) { reportError(error); return }
     }
     setTerminalSessions((current) => {
@@ -457,7 +457,7 @@ export default function App() {
     : view === 'activity' ? <ActivityPage sessions={sessions} projects={projects} clearedActivity={clearedActivity} onOpen={selectSession} onClear={clearActivity} />
     : view === 'plugins' ? <PluginsPage harness={activeHarness} skills={pluginSkills.skills} warnings={pluginSkills.warnings} loading={pluginSkills.loading} activeProjectPath={activeProject?.primaryFolder} askUserEnabled={settingsState.settings.askUserEnabled} onSetAskUserEnabled={(enabled) => settingsState.updateSettings({ askUserEnabled: enabled })} browserEnabled={settingsState.settings.browserEnabled} onSetBrowserEnabled={(enabled) => settingsState.updateSettings({ browserEnabled: enabled })} onOpenExternal={openExternal} onRefresh={pluginSkills.refresh} onInstall={installSkill} onInstallExtension={installExtension} onConnectMcp={connectMcp} onSetMcpEnabled={setMcpEnabled} onMutateCapability={mutateCapability} />
     : view === 'skills' ? <SkillsPage harness={activeHarness} skills={pluginSkills.skills} warnings={pluginSkills.warnings} loading={pluginSkills.loading} onRefresh={pluginSkills.refresh} onReveal={revealInFileManager} onReadDocument={(path) => bridge ? bridge.plugins.readSkillDocument(path, activeHarness) : Promise.reject(new Error(t('app.error.skillsDesktopOnly')))} />
-    : view === 'settings' ? <SettingsPage initialSection={settingsSectionRequest.section} initialSectionRequestId={settingsSectionRequest.id} settings={settingsState.settings} meta={meta} providerCatalog={provider.catalog} onUpdate={settingsState.updateSettings} onRefreshHarnesses={refreshDetectedHarnesses} onRefreshProviders={() => provider.refresh(true)} onSetProviderEnabled={provider.setEnabled} onSetAllProvidersEnabled={provider.setAllEnabled} onSetAllProvidersDisabled={provider.setAllDisabled} onSetModelEnabled={provider.setModelEnabled} onResetBrowser={async () => {
+    : view === 'settings' ? <SettingsPage initialSection={settingsSectionRequest.section} initialSectionRequestId={settingsSectionRequest.id} settings={settingsState.settings} meta={meta} providerCatalog={provider.catalog} onUpdate={settingsState.updateSettings} onRefreshHarnesses={refreshDetectedHarnesses} onRefreshProviders={() => provider.refresh(true)} onSetProviderEnabled={provider.setEnabled} onSetAllProvidersEnabled={provider.setAllEnabled} onSetAllProvidersDisabled={provider.setAllDisabled} onSetModelEnabled={provider.setModelEnabled} onListModelProviders={async () => { if (!bridge) throw new Error(t('app.error.ompDesktopOnly')); return bridge.providers.listModelProviders() }} onSaveProvider={async (draft) => { if (!bridge) throw new Error(t('app.error.ompDesktopOnly')); return bridge.providers.saveProvider(draft) }} onCreateCustomProvider={async (draft) => { if (!bridge) throw new Error(t('app.error.ompDesktopOnly')); return bridge.providers.createCustomProvider(draft) }} onDeleteCustomProvider={async (providerId) => { if (!bridge) throw new Error(t('app.error.ompDesktopOnly')); return bridge.providers.deleteCustomProvider(providerId) }} onDiscoverModels={async (input) => { if (!bridge) throw new Error(t('app.error.ompDesktopOnly')); return bridge.providers.discoverModels(input) }} onResetBrowser={async () => {
         if (!bridge) throw new Error(t('app.error.browserDataDesktopOnly'))
         if (!await bridge.settings.resetBrowserData()) { const error = new Error(t('app.error.browserDataClearFailed')); reportError(error); throw error }
         setBrowserGeneration((value) => value + 1)
@@ -499,6 +499,8 @@ export default function App() {
           onAddProject={addProject}
           onOpenTerminal={() => { void toggleTerminal() }}
           onOpenHarnessSettings={() => { setSettingsSectionRequest((current) => ({ section: 'agent', id: current.id + 1 })); setView('settings') }}
+          onSaveProvider={(draft) => { if (!bridge) throw new Error(t('app.error.ompDesktopOnly')); return bridge.providers.saveProvider(draft) }}
+          onListModelProviders={() => { if (!bridge) throw new Error(t('app.error.ompDesktopOnly')); return bridge.providers.listModelProviders() }}
           onFinish={() => { void settingsState.updateSettings({ onboardingCompleted: true }) }}
         />
       </Suspense>

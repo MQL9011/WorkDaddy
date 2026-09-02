@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useProviderCatalog } from '../../src/hooks/useProviderCatalog'
 import { ProviderSettings } from '../../src/pages/settings/ProviderSettings'
-import type { HarnessId, PrimeModelCatalog, PrimeWorkApi, RuntimeInfo } from '../../src/types/api'
+import type { CreateOmpProviderDraft, DiscoveredModel, DiscoverOmpModelsInput, HarnessId, OmpModelsSnapshot, PrimeModelCatalog, PrimeWorkApi, RuntimeInfo, SaveOmpProviderDraft } from '../../src/types/api'
 
 vi.mock('../../src/components/ui', () => ({
   Modal: ({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) => <div role="dialog" aria-label={title}>{children}{footer}</div>,
@@ -34,6 +34,47 @@ const runtime: RuntimeInfo = {
   thinkingLevel: 'medium', serviceTier: 'default',
 }
 const noop = async () => undefined
+const emptySnapshot = (): OmpModelsSnapshot => ({
+  rows: [],
+  availableCatalog: [
+    { id: 'deepseek', displayName: 'DeepSeek', defaultModel: 'deepseek/deepseek-chat' },
+    { id: 'anthropic', displayName: 'Anthropic', defaultModel: 'anthropic/claude-sonnet-4-5' },
+  ],
+})
+const configuredSnapshot = (): OmpModelsSnapshot => ({
+  rows: [
+    { id: 'deepseek', displayName: 'DeepSeek', kind: 'catalog', configured: true, keylessAuth: false, removable: true, baseUrl: 'https://api.deepseek.com', modelsOverridden: false, models: [] },
+  ],
+  availableCatalog: [
+    { id: 'anthropic', displayName: 'Anthropic', defaultModel: 'anthropic/claude-sonnet-4-5' },
+  ],
+})
+
+function settingsProps(overrides: Partial<{
+  catalog: PrimeModelCatalog | null
+  onRefresh(): Promise<void>
+  onList(): Promise<OmpModelsSnapshot>
+  onSave(draft: SaveOmpProviderDraft): Promise<OmpModelsSnapshot>
+  onCreate(draft: CreateOmpProviderDraft): Promise<OmpModelsSnapshot>
+  onDelete(id: string): Promise<OmpModelsSnapshot>
+  onDiscover(input: DiscoverOmpModelsInput): Promise<readonly DiscoveredModel[]>
+}> = {}) {
+  const snapshot = configuredSnapshot()
+  return {
+    catalog,
+    onRefresh: overrides.onRefresh ?? noop,
+    onSetEnabled: noop,
+    onSetAllEnabled: noop,
+    onSetAllDisabled: noop,
+    onSetModelEnabled: noop,
+    onListModelProviders: overrides.onList ?? (async () => snapshot),
+    onSaveProvider: overrides.onSave ?? (async () => snapshot),
+    onCreateCustomProvider: overrides.onCreate ?? (async () => snapshot),
+    onDeleteCustomProvider: overrides.onDelete ?? (async () => snapshot),
+    onDiscoverModels: overrides.onDiscover ?? (async () => []),
+    onOpenDocs: () => undefined,
+  }
+}
 let root: Root
 let container: HTMLDivElement
 
@@ -52,6 +93,8 @@ afterEach(() => {
 
 async function render(node: ReactNode) {
   await act(async () => { root.render(node) })
+  await act(async () => { await Promise.resolve() })
+  await act(async () => { await Promise.resolve() })
 }
 
 function button(label: string): HTMLButtonElement {
@@ -72,75 +115,116 @@ function deferred<T = void>() {
 }
 
 describe('provider settings behavior and accessibility', () => {
-  it('gives each enable checkbox a provider-specific accessible name and reports toggle failure', async () => {
-    const onSetEnabled = vi.fn().mockRejectedValue(new Error('Provider policy was not saved'))
-    await render(<ProviderSettings catalog={catalog} onRefresh={noop} onSetEnabled={onSetEnabled} onSetAllEnabled={noop} onSetAllDisabled={noop} onSetModelEnabled={noop} onOpenDocs={() => undefined} />)
-
-    const checkbox = container.querySelector<HTMLInputElement>('input[aria-label="Show Anthropic provider"]')
-    expect(checkbox).not.toBeNull()
-    await click(checkbox!)
-
-    expect(onSetEnabled).toHaveBeenCalledWith('anthropic', true)
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Provider policy was not saved')
+  it('shows an empty state and add-provider actions when nothing is configured', async () => {
+    await render(<ProviderSettings {...settingsProps({ onList: async () => emptySnapshot() })} />)
+    expect(container.querySelector('input[type="password"]')).toBeNull()
+    expect(container.textContent).toContain('No providers yet')
+    expect(container.textContent).toContain('Add provider')
+    expect(container.textContent).toContain('Add custom provider')
+    expect(container.querySelector('.settings-group__heading')).not.toBeNull()
+    expect(button('Add provider').className).toContain('button--compact')
+    expect(button('Add custom provider').className).toContain('button--compact')
+    expect(button('Add provider').className).not.toContain('button--primary')
   })
 
-  it('uses one bulk mutation and exposes the provider and model catalogue UI', async () => {
-    const onSetEnabled = vi.fn().mockResolvedValue(undefined)
-    const onSetAllEnabled = vi.fn().mockResolvedValue(undefined)
-    const onSetAllDisabled = vi.fn().mockResolvedValue(undefined)
-    await render(<ProviderSettings catalog={catalog} onRefresh={noop} onSetEnabled={onSetEnabled} onSetAllEnabled={onSetAllEnabled} onSetAllDisabled={onSetAllDisabled} onSetModelEnabled={noop} onOpenDocs={() => undefined} />)
-
-    expect(container.textContent).toContain('2 providers · 3 models')
-    expect(container.textContent).toContain('OpenAI Codex')
-    expect(container.textContent).toContain('Anthropic')
-    const providerRows = [...container.querySelectorAll('.provider-row')]
-    expect(providerRows[0]?.textContent).toContain('OpenAI Codex')
-    expect(providerRows[1]?.textContent).toContain('Anthropic')
-    expect(button('Credential setup')).toBeTruthy()
-    await click(button('Show all'))
-    expect(onSetAllEnabled).toHaveBeenCalledTimes(1)
-    expect(onSetEnabled).not.toHaveBeenCalled()
-    await click(button('Hide all'))
-    expect(onSetAllDisabled).toHaveBeenCalledTimes(1)
-    expect(onSetEnabled).not.toHaveBeenCalled()
-
-    await click(button('Models'))
-    expect(container.textContent).toContain('GPT-5.6')
-    expect(container.textContent).toContain('GPT-5.5')
-    expect(container.textContent).toContain('Claude Sonnet')
-    expect(container.querySelector('input[aria-label="Search models"]')).not.toBeNull()
-    const groups = [...container.querySelectorAll('.provider-model-group')]
-    expect(groups).toHaveLength(2)
-    expect(groups[0]?.querySelector('.provider-model-group__heading')?.textContent).toContain('OpenAI Codex')
-    expect(groups[0]?.querySelector('.provider-model-group__heading')?.textContent).toContain('1 of 2 on')
-    expect(groups[1]?.querySelector('.provider-model-group__heading')?.textContent).toContain('Anthropic')
-    expect(groups[1]?.querySelector('.provider-model-group__heading')?.textContent).toContain('0 of 1 on')
-    const openAiModels = [...groups[0]!.querySelectorAll('.provider-model-row')]
-    expect(openAiModels[0]?.textContent).toContain('GPT-5.6')
-    expect(openAiModels[1]?.textContent).toContain('GPT-5.5')
-    const openAiHeader = groups[0]!.querySelector<HTMLButtonElement>('.provider-model-group__heading')
-    const openAiContent = groups[0]!.querySelector<HTMLElement>('.provider-model-group__models')
-    expect(openAiHeader?.getAttribute('aria-expanded')).toBe('true')
-    expect(openAiContent?.hidden).toBe(false)
-    await click(openAiHeader!)
-    expect(openAiHeader?.getAttribute('aria-expanded')).toBe('false')
-    expect(openAiContent?.hidden).toBe(true)
-    await click(openAiHeader!)
-    expect(openAiHeader?.getAttribute('aria-expanded')).toBe('true')
-    expect(openAiContent?.hidden).toBe(false)
+  it('lists catalog vendors as rows instead of stacked action buttons', async () => {
+    await render(<ProviderSettings {...settingsProps({ onList: async () => emptySnapshot() })} />)
+    await click(button('Add provider'))
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Add a provider')
+    const items = [...container.querySelectorAll('.models-catalog-pick__item')] as HTMLButtonElement[]
+    expect(items.map((item) => item.getAttribute('aria-label'))).toEqual(['DeepSeek', 'Anthropic'])
+    expect(items.every((item) => !item.classList.contains('button'))).toBe(true)
+    await click(items[1])
+    expect(container.querySelector('.models-card')).not.toBeNull()
+    expect(container.querySelector('input[type="password"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('Add custom provider')
   })
 
-  it('puts each model switch at the far right and sends the model key', async () => {
-    const onSetModelEnabled = vi.fn().mockResolvedValue(undefined)
-    await render(<ProviderSettings catalog={catalog} onRefresh={noop} onSetEnabled={noop} onSetAllEnabled={noop} onSetAllDisabled={noop} onSetModelEnabled={onSetModelEnabled} onOpenDocs={() => undefined} />)
+  it('lists catalog rows with status dots and only one editor at a time', async () => {
+    await render(<ProviderSettings {...settingsProps()} />)
+    expect(container.querySelectorAll('.models-row')).toHaveLength(1)
+    expect(container.textContent).toContain('DeepSeek')
+    expect(container.textContent).toContain('Add custom provider')
+    await click(button('Edit'))
+    expect(container.querySelectorAll('.models-card')).toHaveLength(1)
+    expect(container.querySelector('input[type="password"]')).not.toBeNull()
+    expect(container.textContent).not.toContain('Add custom provider')
+  })
 
-    await click(button('Models'))
-    const row = container.querySelector('.provider-model-row')
-    const toggle = row?.querySelector<HTMLInputElement>('input[aria-label="Show GPT-5.6 model"]')
-    expect(toggle).not.toBeNull()
-    expect(row?.lastElementChild?.classList.contains('provider-model-row__toggle')).toBe(true)
-    await click(toggle!)
-    expect(onSetModelEnabled).toHaveBeenCalledWith('openai-codex/gpt-5.6', false)
+  it('saves a key onto the edited catalog row without sending it to discover until asked', async () => {
+    const onSave = vi.fn(async (draft: SaveOmpProviderDraft) => {
+      expect(draft).toMatchObject({ providerId: 'deepseek', apiKey: 'sk-settings-test' })
+      return configuredSnapshot()
+    })
+    const onDiscover = vi.fn(async () => [])
+    const onRefresh = vi.fn(async () => undefined)
+    await render(<ProviderSettings {...settingsProps({ onSave, onDiscover, onRefresh, onList: async () => configuredSnapshot() })} />)
+    await click(button('Edit'))
+    const input = container.querySelector('input[type="password"]') as HTMLInputElement
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, 'sk-settings-test')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(button('Save'))
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'deepseek', apiKey: 'sk-settings-test' }))
+    expect(onDiscover).not.toHaveBeenCalled()
+    expect(onRefresh).toHaveBeenCalled()
+  })
+
+  it('opens the custom provider card and validates a taken id', async () => {
+    await render(<ProviderSettings {...settingsProps()} />)
+    await click(button('Add custom provider'))
+    expect(container.textContent).toContain('Custom provider')
+    const idInput = [...container.querySelectorAll('input')].find((item) => item.getAttribute('type') !== 'password') as HTMLInputElement
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(idInput, 'deepseek')
+      idInput.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click(button('Create provider'))
+    expect(container.querySelector('[role="alert"]')?.textContent).toMatch(/already uses this ID/i)
+  })
+
+  it('saves an empty key as keep-stored and does not fetch until asked', async () => {
+    const onSave = vi.fn(async (draft: SaveOmpProviderDraft) => {
+      expect(draft.apiKey).toBeUndefined()
+      return configuredSnapshot()
+    })
+    const onDiscover = vi.fn(async () => [{ id: 'deepseek-v4-flash', name: 'Flash' }])
+    await render(<ProviderSettings {...settingsProps({ onSave, onDiscover })} />)
+    await click(button('Edit'))
+    await click(button('Save'))
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'deepseek' }))
+    expect(onDiscover).not.toHaveBeenCalled()
+
+    await click(button('Edit'))
+    await click(button('Custom settings'))
+    await click(button('Fetch available models'))
+    expect(onDiscover).toHaveBeenCalledWith(expect.objectContaining({ providerId: 'deepseek' }))
+    expect(onSave).toHaveBeenCalledTimes(1)
+  })
+
+  it('names the provider in the delete confirmation', async () => {
+    const customSnapshot = (): OmpModelsSnapshot => ({
+      rows: [
+        ...configuredSnapshot().rows,
+        { id: 'my-gateway', displayName: 'Acme', kind: 'custom', configured: true, keylessAuth: false, removable: true, baseUrl: 'https://gateway.example/v1', modelsOverridden: true, models: [{ id: 'acme-think' }] },
+      ],
+      availableCatalog: configuredSnapshot().availableCatalog,
+    })
+    const onDelete = vi.fn(async (id: string) => {
+      expect(id).toBe('my-gateway')
+      return configuredSnapshot()
+    })
+    await render(<ProviderSettings {...settingsProps({ onList: async () => customSnapshot(), onDelete })} />)
+    const removeButtons = [...container.querySelectorAll('button')].filter((item) => item.textContent?.includes('Remove'))
+    expect(removeButtons).toHaveLength(2)
+    await click(removeButtons[1] as HTMLButtonElement)
+    expect(container.querySelector('[role="dialog"]')?.getAttribute('aria-label')).toBe('Remove Acme?')
+    expect(container.textContent).toContain('Removing Acme drops its configuration and stored API key.')
+    await click(button('Remove Acme'))
+    expect(onDelete).toHaveBeenCalledWith('my-gateway')
   })
 })
 

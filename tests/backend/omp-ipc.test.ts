@@ -17,7 +17,7 @@ const electronMocks = vi.hoisted(() => ({
 vi.mock('electron', () => electronMocks)
 
 import { registerIpc, type IpcRegistration } from '../../electron/main/ipc'
-import { OmpModelCatalogService, MAX_CATALOG_PROVIDERS } from '../../electron/main/providers-omp'
+import { OmpModelCatalogService } from '../../electron/main/providers-omp'
 
 const EXPECTED_URL = 'prime-work://app/'
 const OMP_SESSION = '/home/user/.omp/agent/sessions/bucket/session.jsonl'
@@ -27,19 +27,28 @@ function fakeOverflowCatalog(): OmpModelCatalogService {
   const directory = mkdtempSync(join(tmpdir(), 'gooeypi-omp-ipc-catalog-'))
   fixtureDirs.push(directory)
   const executable = join(directory, 'omp.cjs')
-  const models = Array.from({ length: MAX_CATALOG_PROVIDERS + 1 }, (_, index) => ({
-    provider: `provider-${String(index).padStart(3, '0')}`,
-    id: 'model',
-    name: `Provider ${index} model`,
+  const catalogPath = join(directory, 'catalog.json')
+  // Exercise model overflow within a single provider.
+  const models = Array.from({ length: 5_001 }, (_, index) => ({
+    provider: 'deepseek',
+    id: `model-${index}`,
+    name: `DeepSeek model ${index}`,
     reasoning: false,
     thinking: null,
     input: ['text'],
     contextWindow: 1,
     maxTokens: 1,
   }))
+  writeFileSync(catalogPath, JSON.stringify({ models }))
   writeFileSync(executable, `#!/usr/bin/env node
+const { readFileSync } = require('node:fs')
+const { join } = require('node:path')
 if (process.argv[2] === '--version') { process.stdout.write('omp/1.2.3\\n'); process.exit(0) }
-if (process.argv[2] === 'models' && process.argv[3] === '--json') { process.stdout.write(${JSON.stringify(JSON.stringify({ models }))}); process.exit(0) }
+if (process.argv[2] === 'models' && process.argv[3] === '--json') {
+  const payload = readFileSync(join(__dirname, 'catalog.json'))
+  process.stdout.write(payload, () => process.exit(0))
+  return
+}
 process.exit(2)
 `)
   chmodSync(executable, 0o755)
@@ -78,7 +87,7 @@ function buildServices() {
   return {
     meta: { version: '0.0.0-test' },
     refreshHarnesses: vi.fn(async () => ({ meta: { version: '0.0.0-refreshed' }, settings: settingsState })),
-    projects: { ...serviceStub(), list: vi.fn(async () => ['omp-projects']), listWorktrees: vi.fn(async () => ['omp-worktrees']), openWorktree: vi.fn(async () => 'omp-open'), createWorktree: vi.fn(async () => 'omp-create'), grantInferred: vi.fn(async () => 'omp-grant') },
+    projects: { ...serviceStub(), list: vi.fn(async () => ['omp-projects']), listWorktrees: vi.fn(async () => ['omp-worktrees']), openWorktree: vi.fn(async () => 'omp-open'), createWorktree: vi.fn(async () => 'omp-create'), grantInferred: vi.fn(async () => 'omp-grant'), regrant: vi.fn(async () => 'omp-regrant') },
     sessions: {
       ...serviceStub(),
       onDidChange: vi.fn(() => () => undefined),
@@ -191,6 +200,8 @@ describe('harness-aware IPC routing', () => {
     await expect(harness.invoke('projects:list')).resolves.toEqual(['omp-projects'])
     await expect(harness.invoke('projects:grant-inferred', '/somewhere')).resolves.toBe('omp-grant')
     expect(harness.services.projects.grantInferred).toHaveBeenCalledWith('/somewhere')
+    await expect(harness.invoke('projects:regrant', '/somewhere')).resolves.toBe('omp-regrant')
+    expect(harness.services.projects.regrant).toHaveBeenCalledWith('/somewhere')
     await expect(harness.invoke('projects:list-worktrees', '/repo')).resolves.toEqual(['omp-worktrees'])
     await expect(harness.invoke('projects:open-worktree', '/repo', '/linked')).resolves.toBe('omp-open')
     await expect(harness.invoke('projects:create-worktree', '/repo', 'feature')).resolves.toBe('omp-create')
@@ -243,6 +254,18 @@ describe('harness-aware IPC routing', () => {
     expect(electronMocks.ipcMain.handle).not.toHaveBeenCalledWith('providers:save-api-key', expect.any(Function))
     expect(electronMocks.ipcMain.handle).not.toHaveBeenCalledWith('providers:start-mcp-oauth', expect.any(Function))
     expect(electronMocks.ipcMain.handle).not.toHaveBeenCalledWith('providers:logout-mcp', expect.any(Function))
+  })
+
+  it('registers model-provider channels without invoking them against HOME', () => {
+    for (const channel of [
+      'providers:list-model-providers',
+      'providers:save-provider',
+      'providers:create-custom-provider',
+      'providers:delete-custom-provider',
+      'providers:discover-models',
+    ]) {
+      expect(electronMocks.ipcMain.handle).toHaveBeenCalledWith(channel, expect.any(Function))
+    }
   })
 
   it('reads the provider catalog through the desktop-owned disabled-provider settings', async () => {
@@ -303,24 +326,25 @@ describe('harness-aware IPC routing', () => {
     expect(harness.services.settings.update).toHaveBeenLastCalledWith({ ompDisabledProviders: ['anthropic'], ompDisabledModels: [] })
   })
 
-  it('applies provider and model toggles only to models retained by a real overflow catalog', async () => {
+  it('applies provider and model toggles against a real overflow catalog', async () => {
     const overflowCatalog = fakeOverflowCatalog()
     const catalogService = harness.services.catalog as unknown as { catalog: OmpModelCatalogService['catalog'] }
     catalogService.catalog = overflowCatalog.catalog.bind(overflowCatalog)
 
     const initial = await harness.invoke('providers:catalog', true) as Awaited<ReturnType<OmpModelCatalogService['catalog']>>
-    expect(initial.providers).toHaveLength(MAX_CATALOG_PROVIDERS)
-    expect(initial.models).toHaveLength(MAX_CATALOG_PROVIDERS)
-    expect(initial.models.some((model) => model.key === 'provider-256/model')).toBe(false)
+    expect(initial.providers).toHaveLength(1)
+    expect(initial.providers[0]?.id).toBe('deepseek')
+    expect(initial.models).toHaveLength(5_000)
+    expect(initial.models.some((model) => model.key === 'deepseek/model-5000')).toBe(false)
 
-    const disabled = await harness.invoke('providers:set-enabled', 'provider-000', false) as Awaited<ReturnType<OmpModelCatalogService['catalog']>>
-    expect(disabled.providers.find((provider) => provider.id === 'provider-000')?.enabled).toBe(false)
-    expect(disabled.models.find((model) => model.key === 'provider-000/model')?.enabled).toBe(false)
+    const disabled = await harness.invoke('providers:set-enabled', 'deepseek', false) as Awaited<ReturnType<OmpModelCatalogService['catalog']>>
+    expect(disabled.providers.find((provider) => provider.id === 'deepseek')?.enabled).toBe(false)
+    expect(disabled.models.every((model) => model.enabled === false)).toBe(true)
 
-    const reenabled = await harness.invoke('providers:set-model-enabled', 'provider-000/model', true) as Awaited<ReturnType<OmpModelCatalogService['catalog']>>
-    expect(reenabled.providers.find((provider) => provider.id === 'provider-000')?.enabled).toBe(true)
-    expect(reenabled.models.find((model) => model.key === 'provider-000/model')?.enabled).toBe(true)
-    await expect(async () => harness.invoke('providers:set-enabled', 'provider-256', false)).rejects.toThrow('Provider was not found')
-    await expect(async () => harness.invoke('providers:set-model-enabled', 'provider-256/model', false)).rejects.toThrow('Model was not found')
+    const reenabled = await harness.invoke('providers:set-model-enabled', 'deepseek/model-0', true) as Awaited<ReturnType<OmpModelCatalogService['catalog']>>
+    expect(reenabled.providers.find((provider) => provider.id === 'deepseek')?.enabled).toBe(true)
+    expect(reenabled.models.find((model) => model.key === 'deepseek/model-0')?.enabled).toBe(true)
+    await expect(async () => harness.invoke('providers:set-enabled', 'anthropic', false)).rejects.toThrow('Provider was not found')
+    await expect(async () => harness.invoke('providers:set-model-enabled', 'deepseek/model-5000', false)).rejects.toThrow('Model was not found')
   })
 })

@@ -11,7 +11,7 @@ import { DEFAULT_SETTINGS } from '../../src/lib/data'
 import { AgentSettings } from '../../src/pages/settings/AgentSettings'
 import { ProviderSettings } from '../../src/pages/settings/ProviderSettings'
 import { SettingsPage } from '../../src/pages/SettingsPage'
-import type { AppMeta, AppSettings, HarnessId, PrimeModelCatalog, PrimeWorkApi, ProjectRecord, RuntimeInfo, SessionRecord } from '../../src/types/api'
+import type { AppMeta, AppSettings, HarnessId, OmpModelsSnapshot, PrimeModelCatalog, PrimeWorkApi, ProjectRecord, RuntimeInfo, SessionRecord } from '../../src/types/api'
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
@@ -30,8 +30,7 @@ function deferred<T>(): Deferred<T> {
 
 const ompProject: ProjectRecord = {
   id: 'omp-project', harness: 'omp', name: 'OMP project', path: '/omp', folders: ['/omp'], primaryFolder: '/omp', pinned: false,
-  createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 1,
-}
+  createdAt: '2026-01-01T00:00:00.000Z', lastOpenedAt: '2026-01-01T00:00:00.000Z', sessionCount: 1, authorized: true }
 const ompSession: SessionRecord = {
   id: 'omp-session', harness: 'omp', projectPath: '/omp', filePath: '/omp-sessions/current.jsonl', title: 'OMP session',
   createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z', status: 'idle', depth: 0,
@@ -359,6 +358,15 @@ describe('provider catalog', () => {
   })
 })
 
+const emptyModelsSnapshot: OmpModelsSnapshot = {
+  rows: [
+    { id: 'deepseek', displayName: 'DeepSeek', kind: 'catalog', configured: true, keylessAuth: false, removable: true, modelsOverridden: false, models: [] },
+  ],
+  availableCatalog: [
+    { id: 'anthropic', displayName: 'Anthropic', defaultModel: 'anthropic/claude-sonnet-4-5' },
+  ],
+}
+
 describe('harness settings surfaces', () => {
   it('follows a changed initial section while the settings page stays mounted', async () => {
     const noop = () => undefined
@@ -379,6 +387,11 @@ describe('harness settings surfaces', () => {
         onSetAllProvidersEnabled={noopAsync}
         onSetAllProvidersDisabled={noopAsync}
         onSetModelEnabled={noopAsync}
+        onListModelProviders={async () => emptyModelsSnapshot}
+        onSaveProvider={async () => emptyModelsSnapshot}
+        onCreateCustomProvider={async () => emptyModelsSnapshot}
+        onDeleteCustomProvider={async () => emptyModelsSnapshot}
+        onDiscoverModels={async () => []}
       />
     )
 
@@ -424,28 +437,41 @@ describe('harness settings surfaces', () => {
     expect(onUpdate).toHaveBeenCalledWith({ ompApprovalMode: 'write' })
   })
 
-  it('renders OMP provider toggles while keeping credentials CLI-owned', async () => {
+  it('renders catalog model rows with an editor instead of CLI-owned toggles', async () => {
     const catalog: PrimeModelCatalog = {
       primeVersion: '17.2.11', refreshedAt: '2026-08-06T00:00:00.000Z',
-      models: [{ key: 'openai-codex/gpt-5.6-luna', provider: 'openai-codex', id: 'gpt-5.6-luna', name: 'Luna GPT-5.6', reasoning: true, input: ['text'], contextWindow: 400_000, maxTokens: 128_000, availableThinkingLevels: ['low', 'high'], fastModeSupported: false, available: true }],
+      models: [{ key: 'deepseek/deepseek-chat', provider: 'deepseek', id: 'deepseek-chat', name: 'DeepSeek Chat', reasoning: false, input: ['text'], contextWindow: 128_000, maxTokens: 8_192, availableThinkingLevels: ['off'], fastModeSupported: false, available: true }],
       providers: [
-        { id: 'openai-codex', name: 'OpenAI Codex', authMethod: 'external', configured: true, authLabel: 'Credentials managed by the omp CLI', modelCount: 1, availableModelCount: 1, enabled: true },
-        { id: 'anthropic', name: 'Anthropic', authMethod: 'external', configured: true, modelCount: 0, availableModelCount: 0, enabled: true },
+        { id: 'deepseek', name: 'DeepSeek', authMethod: 'api_key', configured: true, authLabel: 'API key', modelCount: 1, availableModelCount: 1, enabled: true },
       ],
     }
     const noopAsync = async () => undefined
     await act(async () => {
-      root.render(<ProviderSettings harness="omp" catalog={catalog} onRefresh={noopAsync} onSetEnabled={noopAsync} onSetAllEnabled={noopAsync} onSetAllDisabled={noopAsync} onSetModelEnabled={noopAsync} onOpenDocs={() => undefined} />)
+      root.render(<ProviderSettings
+        harness="omp"
+        catalog={catalog}
+        onRefresh={noopAsync}
+        onSetEnabled={noopAsync}
+        onSetAllEnabled={noopAsync}
+        onSetAllDisabled={noopAsync}
+        onSetModelEnabled={noopAsync}
+        onListModelProviders={async () => emptyModelsSnapshot}
+        onSaveProvider={async () => emptyModelsSnapshot}
+        onCreateCustomProvider={async () => emptyModelsSnapshot}
+        onDeleteCustomProvider={async () => emptyModelsSnapshot}
+        onDiscoverModels={async () => []}
+        onOpenDocs={() => undefined}
+      />)
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
-    expect(container.textContent).toContain('OMP catalogue')
-    expect(container.textContent).toContain('Credentials managed by the omp CLI')
-    expect(container.querySelectorAll('input[type="checkbox"]')).toHaveLength(2)
+    expect(container.textContent).toContain('DeepSeek')
+    expect(container.textContent).toContain('Add custom provider')
+    expect(container.querySelectorAll('.models-row')).toHaveLength(1)
     const buttonLabels = [...container.querySelectorAll('button')].map((button) => button.textContent ?? '')
-    expect(buttonLabels.some((text) => text.includes('Hide all'))).toBe(true)
-    expect(buttonLabels.some((text) => text.includes('Credential setup'))).toBe(true)
-    for (const label of ['Connect', 'Reconnect', 'Add key', 'Replace key']) {
-      expect(buttonLabels.some((text) => text.includes(label))).toBe(false)
-    }
+    expect(buttonLabels.some((text) => text.includes('Edit'))).toBe(true)
+    expect(buttonLabels.some((text) => text.includes('Hide all'))).toBe(false)
+    expect(buttonLabels.some((text) => text.includes('Connect'))).toBe(false)
   })
 })

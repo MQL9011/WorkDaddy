@@ -50,6 +50,7 @@ export const SAMPLE_PROJECTS: ProjectRecord[] = [
     lastOpenedAt: new Date().toISOString(),
     sessionCount: 4,
     gitBranch: 'main',
+    authorized: true,
   },
   {
     id: 'storefront',
@@ -63,6 +64,7 @@ export const SAMPLE_PROJECTS: ProjectRecord[] = [
     lastOpenedAt: new Date(Date.now() - 864e5).toISOString(),
     sessionCount: 2,
     gitBranch: 'feature/search',
+    authorized: true,
   },
 ]
 
