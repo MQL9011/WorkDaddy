@@ -19,7 +19,7 @@ const electron = vi.hoisted(() => ({
 
 vi.mock('electron', () => electron)
 
-import { activeShutdownWork, confirmAppClose, hardenRenderer, isMacWindowCloseShortcut, loadInitialRenderer, mainWindowChromeOptions, resolveRendererAssetPath, routeAllWindowsClosed, settleShutdown, shutdownPrompt, startupFailureDialog } from '../../electron/main/index'
+import { activeShutdownWork, appIconPath, confirmAppClose, hardenRenderer, isMacWindowCloseShortcut, loadInitialRenderer, mainWindowChromeOptions, resolveRendererAssetPath, routeAllWindowsClosed, settleShutdown, shutdownPrompt, startupFailureDialog } from '../../electron/main/index'
 import { StateMigrationError, UnsupportedStateVersionError } from '../../electron/main/store'
 import type { RuntimeInfo } from '../../src/types/api'
 import type { BrowserWindow } from 'electron'
@@ -41,6 +41,10 @@ describe('application window lifecycle', () => {
     })
     expect(startupFailureDialog(new UnsupportedStateVersionError(99, '/tmp/state.json'))?.title).toBe('WorkDaddy update required')
     expect(startupFailureDialog(new Error('ordinary startup failure'))).toBeNull()
+  })
+
+  it('uses the DEV-badged icon while unpackaged', () => {
+    expect(appIconPath()).toBe('/tmp/prime-work/assets/icon-dev.png')
   })
 
   it('uses one overlay title bar on Windows and Linux while preserving native macOS chrome', () => {

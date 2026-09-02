@@ -54,8 +54,11 @@ try {
 
   const builderArgs = [`--${platform}`, `--${arch}`, '--publish', 'never', `--config.directories.output=release/${platform}/${arch}`]
   if (isPublic && platform === 'win') builderArgs.push('--config.forceCodeSigning=true')
-  const builderEnv = isQa ? { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false' } : process.env
-  if (isQa && platform === 'mac') builderArgs.push('--config.mac.identity=null', '--config.mac.notarize=false')
+  const builderEnv = isQa ? { ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: 'false', WORKDADDY_QA: '1' } : process.env
+  if (isQa && platform === 'mac') {
+    builderArgs.push('--config.mac.identity=null', '--config.mac.notarize=false', '--config.mac.icon=assets/icon-dev.icns', '--config.mac.extendInfo.CFBundleDisplayName=WorkDaddy Dev')
+  }
+  if (isQa && platform !== 'mac') builderArgs.push(`--config.${platform}.icon=assets/icon-dev.png`)
   run('electron-builder', builderArgs, builderEnv)
   if (platform === 'win' && !dryRun) {
     const outputDirectory = resolve('release', platform, arch)

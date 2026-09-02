@@ -58,8 +58,8 @@ installCrashGuards({
   },
 })
 
-function appIconPath(): string {
-  return app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(app.getAppPath(), 'assets', 'icon.png')
+export function appIconPath(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'icon.png') : join(app.getAppPath(), 'assets', 'icon-dev.png')
 }
 
 // One policy for every surface that serves renderer content: the app protocol
@@ -758,6 +758,7 @@ else void app.whenReady().then(async () => {
     try { wasOpenedAtLogin = app.getLoginItemSettings().wasOpenedAtLogin } catch { /* The explicit flag remains available if the OS lookup fails. */ }
   }
   startInBackground = shouldStartInBackground(process.argv, wasOpenedAtLogin)
+  if (!app.isPackaged) app.setName('WorkDaddy Dev')
   if (process.platform === 'darwin') {
     app.setActivationPolicy(startInBackground ? 'accessory' : 'regular')
     if (!startInBackground) app.dock?.setIcon(appIconPath())

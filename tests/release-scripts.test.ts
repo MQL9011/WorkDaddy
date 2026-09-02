@@ -43,7 +43,8 @@ import { parseDraftAssetNames, staleDraftReleaseAssets } from '../scripts/releas
 import { assertBundleSizeBudgets, assertPackageSizeBudgets, BUNDLE_SIZE_BUDGETS, collectBundleSizeMetrics, collectPackageSizeMetrics, PACKAGE_SIZE_BUDGETS } from '../scripts/release/size-budgets.mjs'
 import { assertReleaseTag } from '../scripts/release/validate-release-tag.mjs'
 // after-pack.cjs is CommonJS; the interop layer exposes module.exports properties as named exports.
-import { executablePath } from '../scripts/release/after-pack.cjs'
+import { applyQaAppIcon, executablePath, resourcesIconPath } from '../scripts/release/after-pack.cjs'
+import { stampDevElectronApp } from '../scripts/stamp-dev-electron-app.mjs'
 import { collectAuditAdvisories, describeAuditEvaluation, evaluateAuditReport, parseAuditExceptions, readAuditExceptions } from '../scripts/release/audit-exceptions.mjs'
 import { assertValidAuthenticode, expectedArtifactExtensions, expectedAuthenticodeSigner, expectedNativeFiles } from '../scripts/release/verify-cross-platform-package.mjs'
 
@@ -1132,6 +1133,20 @@ describe('post-package verification helpers', () => {
     expect(macIconChunks.get('ic10')).toEqual(readFileSync('assets/icon.png'))
     expect(macIconChunks.has('ic04')).toBe(true)
     expect(macIconChunks.has('ic11')).toBe(true)
+    const devIcon = readFileSync('assets/icon-dev.icns')
+    expect(devIcon.subarray(0, 4).toString('ascii')).toBe('icns')
+    const devIconChunks = new Map<string, Buffer>()
+    for (let offset = 8; offset < devIcon.length; ) {
+      const type = devIcon.subarray(offset, offset + 4).toString('ascii')
+      const size = devIcon.readUInt32BE(offset + 4)
+      expect(size).toBeGreaterThanOrEqual(8)
+      devIconChunks.set(type, devIcon.subarray(offset + 8, offset + size))
+      offset += size
+    }
+    expect(devIconChunks.get('ic10')).toEqual(readFileSync('assets/icon-dev.png'))
+    expect(devIconChunks.has('ic04')).toBe(true)
+    expect(devIconChunks.has('ic11')).toBe(true)
+    expect(packageJson.scripts.dev).toContain('scripts/stamp-dev-electron-app.mjs')
     expect(packageJson.build.asarUnpack).toBeUndefined()
     expect(packageJson.build.mac.asarUnpack).toEqual(['**/node_modules/node-pty/build/Release/pty.node', '**/node_modules/node-pty/build/Release/spawn-helper'])
     expect(packageJson.build.linux.asarUnpack).toEqual(['**/node_modules/node-pty/build/Release/pty.node'])
@@ -1276,6 +1291,66 @@ describe('cross-platform packaging repair', () => {
     expect(executablePath(fixtureContext, 'darwin')).toBe(join('/tmp', 'app-out', 'Prime Work.app', 'Contents', 'MacOS', 'Prime Work'))
     expect(executablePath(fixtureContext, 'win32')).toBe(join('/tmp', 'app-out', 'Prime Work.exe'))
     expect(executablePath(fixtureContext, 'linux')).toBe(join('/tmp', 'app-out', 'prime-work'))
+  })
+
+  test('copies the DEV icon into QA packages and leaves public packages unchanged', () => {
+    const copies: Array<[string, string]> = []
+    const context = { ...fixtureContext, packager: { ...fixtureContext.packager, projectDir: '/repo' } }
+    applyQaAppIcon(context, 'darwin', {}, (from: string, to: string) => {
+      copies.push([from, to])
+    })
+    expect(copies).toEqual([])
+    applyQaAppIcon(context, 'darwin', { WORKDADDY_QA: '1' }, (from: string, to: string) => {
+      copies.push([from, to])
+    })
+    expect(copies).toEqual([[join('/repo', 'assets', 'icon-dev.png'), resourcesIconPath(context, 'darwin')]])
+    expect(resourcesIconPath(context, 'darwin')).toBe(join('/tmp', 'app-out', 'Prime Work.app', 'Contents', 'Resources', 'icon.png'))
+    expect(resourcesIconPath(context, 'linux')).toBe(join('/tmp', 'app-out', 'resources', 'icon.png'))
+  })
+
+  test('QA packaging selects the DEV-badged icon and Launchpad display name', () => {
+    const packageScript = readFileSync('scripts/release/package.mjs', 'utf8')
+    expect(packageScript).toContain("WORKDADDY_QA: '1'")
+    expect(packageScript).toContain('--config.mac.icon=assets/icon-dev.icns')
+    expect(packageScript).toContain('--config.mac.extendInfo.CFBundleDisplayName=WorkDaddy Dev')
+    expect(packageScript).toContain('`--config.${platform}.icon=assets/icon-dev.png`')
+  })
+
+  test('stamps Electron.app as WorkDaddy Dev on macOS and skips other hosts', () => {
+    const copies: Array<[string, string]> = []
+    const runs: Array<{ file: string; args: string[] }> = []
+    expect(
+      stampDevElectronApp({
+        platform: 'linux',
+        exists: () => true,
+        copyFile: () => {
+          throw new Error('non-darwin hosts must not copy an icon')
+        },
+      }),
+    ).toEqual({ stamped: false, reason: 'not-darwin' })
+    expect(
+      stampDevElectronApp({
+        platform: 'darwin',
+        electronApp: '/tmp/Electron.app',
+        icon: '/tmp/icon-dev.icns',
+        exists: () => true,
+        copyFile: (from: string, to: string) => {
+          copies.push([from, to])
+        },
+        run: (file: string, args: string[]) => {
+          runs.push({ file, args })
+          return { status: 0, stdout: '', stderr: '' }
+        },
+      }),
+    ).toEqual({ stamped: true })
+    expect(copies).toEqual([['/tmp/icon-dev.icns', join('/tmp/Electron.app', 'Contents', 'Resources', 'electron.icns')]])
+    expect(runs.map(({ file, args }) => [file, args[0], args.at(-1)])).toEqual([
+      ['/usr/libexec/PlistBuddy', '-c', join('/tmp/Electron.app', 'Contents', 'Info.plist')],
+      ['/usr/libexec/PlistBuddy', '-c', join('/tmp/Electron.app', 'Contents', 'Info.plist')],
+      ['codesign', '--force', '/tmp/Electron.app'],
+    ])
+    expect(runs[0].args[1]).toBe('Set :CFBundleDisplayName WorkDaddy Dev')
+    expect(runs[1].args[1]).toBe('Set :CFBundleName WorkDaddy Dev')
   })
 
   function globMatchExists(directory: string, segments: string[]): boolean {

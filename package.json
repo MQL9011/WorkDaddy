@@ -16,7 +16,7 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "node scripts/stamp-dev-electron-app.mjs && electron-vite dev",
     "build": "npm run typecheck && npm run build:bundle",
     "build:bundle": "electron-vite build",
     "preview": "electron-vite preview",
