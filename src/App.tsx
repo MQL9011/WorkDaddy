@@ -52,7 +52,7 @@ const EMPTY_PROVIDERS: PrimeProviderDescriptor[] = []
 // PoC-only: mirrors assets/vault-samples/code-review/command.md. Exercises
 // the vault_read decryption tool end to end from the real Composer/agent-rpc
 // path instead of a CLI probe. Remove once a real command-list UI ships.
-const ANCODER_VAULT_DEMO_PROMPT = `Run the "code-review" skill. Its content is encrypted at rest:
+const MAERWEN_VAULT_DEMO_PROMPT = `Run the "code-review" skill. Its content is encrypted at rest:
 
 1. Call \`vault_read\` with \`file: "SKILL.md"\` to load the skill body.
 2. Follow its instructions exactly, including any further \`vault_read\` calls
@@ -484,7 +484,7 @@ export default function App() {
           {inspectorVisible ? <button type="button" className="panel-scrim panel-scrim--inspector" aria-label={t('app.closeInspectorAria')} onClick={toggleInspector} /> : null}
       </div> : <Suspense fallback={<LoadingPanel label={view} />}>{page}</Suspense>}</div>
     </div>
-    {paletteOpen ? <Suspense fallback={null}><CommandPalette open onClose={() => setPaletteOpen(false)} onNavigate={navigate} onNewSession={newSession} onToggleSidebar={toggleSidebar} onToggleTerminal={toggleTerminal} onOpenBrowser={openBrowser} onVaultDemo={() => { void sendPrompt(ANCODER_VAULT_DEMO_PROMPT).catch(() => undefined) }} platform={platform} /></Suspense> : null}
+    {paletteOpen ? <Suspense fallback={null}><CommandPalette open onClose={() => setPaletteOpen(false)} onNavigate={navigate} onNewSession={newSession} onToggleSidebar={toggleSidebar} onToggleTerminal={toggleTerminal} onOpenBrowser={openBrowser} onVaultDemo={() => { void sendPrompt(MAERWEN_VAULT_DEMO_PROMPT).catch(() => undefined) }} platform={platform} /></Suspense> : null}
     {extension.extensionUi ? <Suspense fallback={<LoadingPanel label="request" />}><ExtensionUiModal request={extension.extensionUi.request} onRespond={(response) => void extension.respondToExtensionUi(response)} platform={platform} /></Suspense> : null}
     {meta && initialized && !settingsState.settings.onboardingCompleted ? (
       <Suspense fallback={null}>

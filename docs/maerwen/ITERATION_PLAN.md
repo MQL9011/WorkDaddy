@@ -63,8 +63,8 @@
 | `npm install` | ⚠️ 完成，但有 `electron-winstaller` 的 `ENOTEMPTY` 告警，不影响开发链路 |
 | `npm run typecheck`（4 个 tsconfig） | ✅ 全绿 |
 | `npm test` | ⚠️ 1603 个用例，**上游自带约 10 个不稳定用例**，见下 |
-| 设计规范文档（DSH 取色） | ✅ `docs/ancoder/design-system.md` |
-| 裁剪方案文档 | ✅ `docs/ancoder/trim-plan.md` |
+| 设计规范文档（DSH 取色） | ✅ `docs/maerwen/design-system.md` |
+| 裁剪方案文档 | ✅ `docs/maerwen/trim-plan.md` |
 
 #### S0 发现的既有问题：测试套件不稳定
 
@@ -141,7 +141,7 @@ curl -fsSL https://omp.sh/install | sh
 > 那之后改名才是纯机械操作。
 
 - `package.json`：`name` → `work-daddy`，`productName` → `WorkDaddy`，
-  `build.appId` → `ai.ancoder.work`，`homepage`/`repository` 指向新仓库，版本重置 `0.1.0`。
+  `build.appId` → `ai.maerwen.work`，`homepage`/`repository` 指向新仓库，版本重置 `0.1.0`。
 - 图标：`assets/icon.icns` / `icon.png` 换成自有品牌。
 - 自动更新源（`electron-updater`）指向 `MQL9011/WorkDaddy` 的 releases。
 - `LICENSE` 保留上游 MIT 原文，新增 `NOTICE.md` 声明衍生关系（MIT 的署名义务）。
@@ -258,13 +258,13 @@ skill 加载完全是 discovery-based、对桌面端不可见——**没有任�
   会话内 tab（S3 里已经识别过、同样延后的信息架构变化），不是本节可以单独
   完成的工作，等这块信息架构调整启动时再一并做。
 
-#### 4.4 技能包安装与分发（2–3 天）—— 🔶 核心安装路径已存在，`Ancoder_SkillsCreator` 集成待澄清
+#### 4.4 技能包安装与分发（2–3 天）—— 🔶 核心安装路径已存在，`Maerwen_SkillsCreator` 集成待澄清
 
 - omp plugin / 本地目录 / MCP 三种安装源已经在 `PluginsPage.tsx` 的 Add 弹窗里
   实现并测试覆盖（`omp plugin install <target> --json`，本地扩展文件安装，
   本地 stdio MCP）。技能库页刻意没有重复这套 UI，而是保持技能库为纯浏览视图，
   安装/管理仍走 Capabilities 页——这与 4.1 的"技能没有独立启停"结论是一致的。
-- **未知项**：`Ancoder_SkillsCreator` / `skill-cli` 具体是什么（本机可执行文件？
+- **未知项**：`Maerwen_SkillsCreator` / `skill-cli` 具体是什么（本机可执行文件？
   npm 包？需要网络的 Web 服务？），仓库里没有任何相关文件或文档。在明确这一点
   之前，"应用内新建技能调起既有生成器"这条无法开工。
 

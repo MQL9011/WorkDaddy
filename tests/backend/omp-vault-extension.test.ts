@@ -54,7 +54,7 @@ async function encryptEnvelope(plaintext: string, relativePath: string, keyHex: 
 const dirs: string[] = []
 
 function vaultRoot(): string {
-  const dir = mkdtempSync(join(tmpdir(), 'ancoder-vault-'))
+  const dir = mkdtempSync(join(tmpdir(), 'maerwen-vault-'))
   dirs.push(dir)
   return dir
 }
@@ -72,8 +72,8 @@ afterEach(() => {
 
 describe('omp-work-vault extension', () => {
   it('registers nothing without a configured key and root', async () => {
-    vi.stubEnv('ANCODER_VAULT_KEY', '')
-    vi.stubEnv('ANCODER_VAULT_ROOT', '')
+    vi.stubEnv('MAERWEN_VAULT_KEY', '')
+    vi.stubEnv('MAERWEN_VAULT_ROOT', '')
     const factory = await loadVaultExtension()
     const { tools, pi } = piHost()
     await factory(pi as unknown as OmpExtensionApi)
@@ -81,8 +81,8 @@ describe('omp-work-vault extension', () => {
   })
 
   it('registers a standalone vault_read tool when key and root are configured', async () => {
-    vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-    vi.stubEnv('ANCODER_VAULT_ROOT', vaultRoot())
+    vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+    vi.stubEnv('MAERWEN_VAULT_ROOT', vaultRoot())
     const factory = await loadVaultExtension()
     const { tools, pi } = piHost()
     await factory(pi as unknown as OmpExtensionApi)
@@ -97,8 +97,8 @@ describe('omp-work-vault extension', () => {
     mkdirSync(join(root, 'references'), { recursive: true })
     writeFileSync(join(root, 'SKILL.md.enc'), await encryptEnvelope('# Body\nProtected instructions.', 'SKILL.md', KEY_HEX))
     writeFileSync(join(root, 'references', 'checklist.md.enc'), await encryptEnvelope('- item one', 'references/checklist.md', KEY_HEX))
-    vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-    vi.stubEnv('ANCODER_VAULT_ROOT', root)
+    vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+    vi.stubEnv('MAERWEN_VAULT_ROOT', root)
     const factory = await loadVaultExtension()
     const { tools, pi } = piHost()
     await factory(pi as unknown as OmpExtensionApi)
@@ -115,8 +115,8 @@ describe('omp-work-vault extension', () => {
   it('rejects the wrong key with a generic decryption error', async () => {
     const root = vaultRoot()
     writeFileSync(join(root, 'SKILL.md.enc'), await encryptEnvelope('secret body', 'SKILL.md', KEY_HEX))
-    vi.stubEnv('ANCODER_VAULT_KEY', OTHER_KEY_HEX)
-    vi.stubEnv('ANCODER_VAULT_ROOT', root)
+    vi.stubEnv('MAERWEN_VAULT_KEY', OTHER_KEY_HEX)
+    vi.stubEnv('MAERWEN_VAULT_ROOT', root)
     const factory = await loadVaultExtension()
     const { tools, pi } = piHost()
     await factory(pi as unknown as OmpExtensionApi)
@@ -127,8 +127,8 @@ describe('omp-work-vault extension', () => {
     const root = vaultRoot()
     // Encrypted under one logical path but saved on disk under another name.
     writeFileSync(join(root, 'renamed.md.enc'), await encryptEnvelope('secret body', 'SKILL.md', KEY_HEX))
-    vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-    vi.stubEnv('ANCODER_VAULT_ROOT', root)
+    vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+    vi.stubEnv('MAERWEN_VAULT_ROOT', root)
     const factory = await loadVaultExtension()
     const { tools, pi } = piHost()
     await factory(pi as unknown as OmpExtensionApi)
@@ -136,8 +136,8 @@ describe('omp-work-vault extension', () => {
   })
 
   it('rejects path traversal and absolute paths outside the vault root', async () => {
-    vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-    vi.stubEnv('ANCODER_VAULT_ROOT', vaultRoot())
+    vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+    vi.stubEnv('MAERWEN_VAULT_ROOT', vaultRoot())
     const factory = await loadVaultExtension()
     const { tools, pi } = piHost()
     await factory(pi as unknown as OmpExtensionApi)
@@ -146,8 +146,8 @@ describe('omp-work-vault extension', () => {
   })
 
   it('reports a clear error for a file that does not exist', async () => {
-    vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-    vi.stubEnv('ANCODER_VAULT_ROOT', vaultRoot())
+    vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+    vi.stubEnv('MAERWEN_VAULT_ROOT', vaultRoot())
     const factory = await loadVaultExtension()
     const { tools, pi } = piHost()
     await factory(pi as unknown as OmpExtensionApi)
@@ -155,8 +155,8 @@ describe('omp-work-vault extension', () => {
   })
 
   it('rejects a non-string file parameter even if the tool schema is bypassed', async () => {
-    vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-    vi.stubEnv('ANCODER_VAULT_ROOT', vaultRoot())
+    vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+    vi.stubEnv('MAERWEN_VAULT_ROOT', vaultRoot())
     const factory = await loadVaultExtension()
     const { tools, pi } = piHost()
     await factory(pi as unknown as OmpExtensionApi)
@@ -167,8 +167,8 @@ describe('omp-work-vault extension', () => {
     it('rejects a missing header separator', async () => {
       const root = vaultRoot()
       writeFileSync(join(root, 'SKILL.md.enc'), 'not an envelope at all')
-      vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-      vi.stubEnv('ANCODER_VAULT_ROOT', root)
+      vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+      vi.stubEnv('MAERWEN_VAULT_ROOT', root)
       const factory = await loadVaultExtension()
       const { tools, pi } = piHost()
       await factory(pi as unknown as OmpExtensionApi)
@@ -178,8 +178,8 @@ describe('omp-work-vault extension', () => {
     it('rejects an unrecognized magic/version header', async () => {
       const root = vaultRoot()
       writeFileSync(join(root, 'SKILL.md.enc'), 'CC_VAULT_V2\npath:SKILL.md\n\nQQ==\n')
-      vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-      vi.stubEnv('ANCODER_VAULT_ROOT', root)
+      vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+      vi.stubEnv('MAERWEN_VAULT_ROOT', root)
       const factory = await loadVaultExtension()
       const { tools, pi } = piHost()
       await factory(pi as unknown as OmpExtensionApi)
@@ -189,8 +189,8 @@ describe('omp-work-vault extension', () => {
     it('rejects a header missing the path: line', async () => {
       const root = vaultRoot()
       writeFileSync(join(root, 'SKILL.md.enc'), 'CC_VAULT_V1\nnope:SKILL.md\n\nQQ==\n')
-      vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-      vi.stubEnv('ANCODER_VAULT_ROOT', root)
+      vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+      vi.stubEnv('MAERWEN_VAULT_ROOT', root)
       const factory = await loadVaultExtension()
       const { tools, pi } = piHost()
       await factory(pi as unknown as OmpExtensionApi)
@@ -200,8 +200,8 @@ describe('omp-work-vault extension', () => {
     it('rejects an invalid base64 payload', async () => {
       const root = vaultRoot()
       writeFileSync(join(root, 'SKILL.md.enc'), 'CC_VAULT_V1\npath:SKILL.md\n\nnot-base64!!!\n')
-      vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-      vi.stubEnv('ANCODER_VAULT_ROOT', root)
+      vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+      vi.stubEnv('MAERWEN_VAULT_ROOT', root)
       const factory = await loadVaultExtension()
       const { tools, pi } = piHost()
       await factory(pi as unknown as OmpExtensionApi)
@@ -212,8 +212,8 @@ describe('omp-work-vault extension', () => {
       const root = vaultRoot()
       // 4 raw bytes, base64-encoded — shorter than the 12-byte nonce alone.
       writeFileSync(join(root, 'SKILL.md.enc'), `CC_VAULT_V1\npath:SKILL.md\n\n${Buffer.from([1, 2, 3, 4]).toString('base64')}\n`)
-      vi.stubEnv('ANCODER_VAULT_KEY', KEY_HEX)
-      vi.stubEnv('ANCODER_VAULT_ROOT', root)
+      vi.stubEnv('MAERWEN_VAULT_KEY', KEY_HEX)
+      vi.stubEnv('MAERWEN_VAULT_ROOT', root)
       const factory = await loadVaultExtension()
       const { tools, pi } = piHost()
       await factory(pi as unknown as OmpExtensionApi)

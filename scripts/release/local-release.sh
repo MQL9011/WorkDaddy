@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# 一键本地构建 + 发布。详细背景见 docs/ancoder/LOCAL_BUILD_AND_RELEASE.md —— 这是
-# GitHub Actions 跑不了时的应急路径，正常情况下应该走 docs/ancoder/RELEASE_SETUP.md
+# 一键本地构建 + 发布。详细背景见 docs/maerwen/LOCAL_BUILD_AND_RELEASE.md —— 这是
+# GitHub Actions 跑不了时的应急路径，正常情况下应该走 docs/maerwen/RELEASE_SETUP.md
 # 那条 tag-push 自动发布的路。
 #
 # 用法：
@@ -77,7 +77,7 @@ npm run toolchain:bootstrap >/dev/null || die "toolchain:bootstrap 失败，看�
 
 if [[ "$PLATFORMS" == *mac* ]]; then
   [ "$(uname -s)" = "Darwin" ] || die "构建 mac 目标必须在 macOS 宿主上跑"
-  [ -f "$P12_PATH" ] || die "找不到签名证书: ${P12_PATH}（设置 WORKDADDY_P12_PATH 指到正确路径，或先看 docs/ancoder/RELEASE_SETUP.md 生成一个）"
+  [ -f "$P12_PATH" ] || die "找不到签名证书: ${P12_PATH}（设置 WORKDADDY_P12_PATH 指到正确路径，或先看 docs/maerwen/RELEASE_SETUP.md 生成一个）"
 fi
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"

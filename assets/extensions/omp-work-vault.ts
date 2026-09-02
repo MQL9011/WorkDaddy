@@ -16,7 +16,7 @@
  * Decryption happens inside this OMP process — never in the Electron main
  * process, which stays free to keep the UI responsive — and the key only
  * arrives through the environment the desktop app sets when it starts this
- * runtime (ANCODER_VAULT_KEY / ANCODER_VAULT_ROOT). A plugin's ciphertext can
+ * runtime (MAERWEN_VAULT_KEY / MAERWEN_VAULT_ROOT). A plugin's ciphertext can
  * therefore only be read back by an OMP runtime the desktop app itself
  * launched, the same way PRIME_WORK_BROWSER_TOKEN scopes the browser bridge
  * to runtimes WorkDaddy started.
@@ -28,7 +28,7 @@
  * Threat model (deliberately not stronger than this): this protects
  * protected skill content at rest against a customer casually copying plugin
  * files, the same guarantee vault.py's own README documents. It is not DRM —
- * anyone who extracts ANCODER_VAULT_KEY from the packaged app (or from this
+ * anyone who extracts MAERWEN_VAULT_KEY from the packaged app (or from this
  * process's memory/environment while it runs) can decrypt every payload it
  * protects, and the plaintext this tool returns is still sent to the model
  * like any other tool result.
@@ -87,8 +87,8 @@ async function resolveHostTypebox(): Promise<OmpTypebox> {
   }
 }
 
-const VAULT_KEY_HEX = process.env.ANCODER_VAULT_KEY
-const VAULT_ROOT = process.env.ANCODER_VAULT_ROOT
+const VAULT_KEY_HEX = process.env.MAERWEN_VAULT_KEY
+const VAULT_ROOT = process.env.MAERWEN_VAULT_ROOT
 const ENVELOPE_MAGIC = 'CC_VAULT_V1'
 const NONCE_LENGTH = 12
 const MAX_FILE_PATH_LENGTH = 512

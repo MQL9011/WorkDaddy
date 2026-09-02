@@ -459,7 +459,7 @@ export interface CapabilityExtensionPaths {
  * explicitly out of scope for this PoC; see the vault PoC plan for the
  * accepted threat model.
  */
-export interface AncoderVaultConfig {
+export interface MaerwenVaultConfig {
   key: string
   root: string
 }
@@ -474,15 +474,15 @@ export function extensionRuntimeEnvironment(
   extensionPaths: CapabilityExtensionPaths,
   askUserEnabled = true,
   browserEnabled = true,
-  vault?: AncoderVaultConfig,
+  vault?: MaerwenVaultConfig,
 ): NodeJS.ProcessEnv {
   return {
     ...(browserEnabled ? browserBridgeEnvironment() : {}),
     PRIME_WORK_BROWSER_EXTENSION_PATH: browserEnabled ? extensionPaths.browser : undefined,
     PRIME_WORK_ASK_USER_EXTENSION_PATH: askUserEnabled ? extensionPaths.askUser : undefined,
     PRIME_WORK_VAULT_EXTENSION_PATH: vault ? extensionPaths.vault : undefined,
-    ANCODER_VAULT_KEY: vault?.key,
-    ANCODER_VAULT_ROOT: vault?.root,
+    MAERWEN_VAULT_KEY: vault?.key,
+    MAERWEN_VAULT_ROOT: vault?.root,
     GOOEYPI_MANAGES_ASK_USER: '1',
   }
 }
@@ -631,10 +631,10 @@ async function bootstrap(): Promise<void> {
   // real packaging pipeline and key story; this only proves the OMP-side
   // decryption path works end to end. See the vault PoC plan for what is
   // explicitly out of scope this round.
-  const ancoderVaultPocRoot = app.isPackaged
+  const maerwenVaultPocRoot = app.isPackaged
     ? join(process.resourcesPath, 'vault-samples', 'code-review', 'payload')
     : join(app.getAppPath(), 'assets', 'vault-samples', 'code-review', 'payload')
-  const ancoderVaultPocKeyHex = 'b102cf6f899bc5fdb291ef7f1f6a03d80691c9040d866a300164ebf274ad9fb5'
+  const maerwenVaultPocKeyHex = 'b102cf6f899bc5fdb291ef7f1f6a03d80691c9040d866a300164ebf274ad9fb5'
   const ompPlugins = new PluginService(ompExecutable, (path) => ompProjects.authorizeProjectRoot(path), {
     harness: 'omp',
     builtInSkills: async () => [{
@@ -681,7 +681,7 @@ async function bootstrap(): Promise<void> {
       capabilityExtensionPaths,
       stateStore.getSettings().askUserEnabled && scope.interactive,
       stateStore.getSettings().browserEnabled,
-      { key: ancoderVaultPocKeyHex, root: ancoderVaultPocRoot },
+      { key: maerwenVaultPocKeyHex, root: maerwenVaultPocRoot },
     )
   ))
   ompManager.setRuntimeStartListener((environment, _info) => {

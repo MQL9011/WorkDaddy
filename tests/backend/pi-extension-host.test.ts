@@ -109,8 +109,8 @@ describe('extensions on a base pi host (no injected pi.typebox)', () => {
 
   it('vault extension registers vault_read with host-resolved schemas', async () => {
     vi.resetModules()
-    vi.stubEnv('ANCODER_VAULT_KEY', 'ab'.repeat(32))
-    vi.stubEnv('ANCODER_VAULT_ROOT', '/tmp/ancoder-vault-host-fallback-fixture')
+    vi.stubEnv('MAERWEN_VAULT_KEY', 'ab'.repeat(32))
+    vi.stubEnv('MAERWEN_VAULT_ROOT', '/tmp/maerwen-vault-host-fallback-fixture')
     const factory = (await import('../../assets/extensions/omp-work-vault')).default
     const { tools, pi } = piHost()
     await factory(pi as unknown as VaultExtensionApi)

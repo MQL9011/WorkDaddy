@@ -77,7 +77,7 @@
     "vitest": "^4.1.10"
   },
   "build": {
-    "appId": "ai.ancoder.work",
+    "appId": "ai.maerwen.work",
     "productName": "WorkDaddy",
     "asar": {
       "smartUnpack": false

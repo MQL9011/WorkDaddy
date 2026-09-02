@@ -26,7 +26,7 @@ mkdir -p /tmp/vault-fixture-src/references
 # ... write SKILL.md and references/checklist.md ...
 
 # 2) Encrypt with the key baked into electron/main/index.ts
-#    (ancoderVaultPocKeyHex — PoC-only, not a real secret management story)
+#    (maerwenVaultPocKeyHex — PoC-only, not a real secret management story)
 VAULT_KEY=<the hex key from electron/main/index.ts> \
   python3 /path/to/vault.py encrypt-dir /tmp/vault-fixture-src \
   --output assets/vault-samples/code-review/payload

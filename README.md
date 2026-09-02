@@ -1,76 +1,75 @@
 # WorkDaddy
 
-**一个 [oh-my-pi (omp)](https://github.com/can1357/oh-my-pi) 的桌面客户端，把「技能」做成主界面。**
+**把技能做成主界面的桌面工作台。** 浏览、校验、分发技能，再在图形界面里发起对话——不需要先熟悉终端。
 
-- 面向**有技能资产、想分发给团队**的人：技能库（按项目/个人/内置分组浏览，同名冲突诚实提示，
-  而不是假装能判断哪个生效）、技能详情（frontmatter、正文渲染、非递归发现校验）、
-  会话内「可能命中的技能」提示。
-- 面向**不熟悉终端**的人：首启向导——自动检测/下载 omp（校验官方 SHA256SUMS.txt）、
-  图形化选工作目录、审批模式用大白话解释、登录引导直接带你打开终端。
+技能在命令行里通常是黑盒：装了什么、有没有同名冲突、深层目录会不会被静默忽略，用户看不见。WorkDaddy 把这些摊开：技能库按项目 / 个人 / 内置分组，详情页渲染 `SKILL.md` 与 frontmatter，发现校验标出不会被扫到的定义；同名冲突如实提示，而不是假装能判断哪个生效。会话过程中若回复读到了匹配已知技能的路径，会给出「可能命中」提示。
 
-> 状态：**S1–S6 已完成，0.2.0 已发布**（macOS 已签名公证，Windows 为免签名 beta，Linux 待补）。
-> 开发计划与每个 Sprint 的实际完成情况见 [`docs/ancoder/ITERATION_PLAN.md`](docs/ancoder/ITERATION_PLAN.md)。
+面向两类人：
+
+- **有技能资产、要分发给团队**：技能库是一等公民，不是藏在设置里的附属项。冲突、来源、正文都可查。
+- **不熟悉终端**：首启向导检测并安装运行时、图形化选工作目录、用大白话解释审批模式，并引导完成登录。干净机器上走完向导即可开始对话。
+
+凭据由运行时自己管理。本应用不读取、不存储、不转发模型登录信息。
 
 ---
 
-## 为什么是 omp
+## 下载
 
-- 技能体系完整：`SKILL.md` 目录发现（`~/.omp/skills`、项目内 `.omp/skills`、omp plugin
-  内置技能），模型侧按需读取正文。**没有跨来源优先级判定**——omp 按 `kind:realpath` 去重，
-  两个不同文件即使同名也会一起出现；WorkDaddy 如实标注「重名」而不是编造一个仲裁结果。
-- 原生兼容 Claude Code 的技能格式——已有的 `~/.claude/skills` 开箱即用。
-- 嵌入接口完备：`omp --mode rpc` 是有完整规范的 NDJSON over stdio 协议，不需要 pty 抓屏。
-- MIT 协议，官方提供各平台单文件二进制。
+当前版本 **0.2.11**。安装包发布在 GitHub Releases：
 
-## 项目关系
+**https://github.com/MQL9011/WorkDaddy/releases/latest**
 
-本项目 fork 自 [am-will/gooey-pi](https://github.com/am-will/gooey-pi)（MIT），
-上游是「Pi / OMP / Prime Agent 三后端通用工作台」，我们收敛为 **omp 单后端 + 技能优先**。
-详见 [`NOTICE.md`](NOTICE.md)。
+| 平台 | 安装包 | 说明 |
+| --- | --- | --- |
+| macOS（Apple 芯片） | [WorkDaddy-0.2.11-m-chip.dmg](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/WorkDaddy-0.2.11-m-chip.dmg) | 已签名公证，双击安装 |
+| Windows（x64） | [WorkDaddy-0.2.11-win-x64.exe](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/WorkDaddy-0.2.11-win-x64.exe) | 免签名 beta；SmartScreen 可能提示，选「更多信息 → 仍要运行」 |
 
-视觉参考 [DeepSeek Harness Desktop](https://github.com/anywhere-labs/deepseek-harness-desktop)，
-设计规范见 [`docs/ancoder/design-system.md`](docs/ancoder/design-system.md)。
+也可下便携包：[macOS arm64 zip](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/WorkDaddy-0.2.11-arm64.zip) · [Windows zip](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/WorkDaddy-0.2.11-win-x64.zip)。校验和见同目录 [SHA256SUMS.txt](https://github.com/MQL9011/WorkDaddy/releases/download/v0.2.11/SHA256SUMS.txt)。
+
+Linux 与 Intel Mac 安装包尚未随 0.2.11 发布，后续版本会放在同一 Releases 页。
+
+仓库与问题反馈：[github.com/MQL9011/WorkDaddy](https://github.com/MQL9011/WorkDaddy)
+
+---
+
+## 使用
+
+1. 按上表下载对应平台安装包并打开。
+2. 第一次启动会进入向导：检测 / 安装运行时 → 选择工作目录 → 选择审批模式 → 登录引导。任一步可跳过，之后在设置里补完。
+3. 侧栏点 **New session**（`⌘N` / `Ctrl+N`）开始对话；底部 **技能** 入口打开技能库。
+
+审批模式随时可在「设置 → Agent」更改：
+
+- **Always ask**（默认）：改文件、跑命令前都会问。
+- **Ask before running commands**：可以改文件，执行命令前仍会确认。
+- **Never ask**：完全自主，只在充分信任当前任务时使用。
+
+更细的日常操作与 FAQ 见 [使用指南](docs/user-guide-zh.md)。
 
 ---
 
 ## 开发
 
-### 环境要求
-
-需要 Node.js 24.15.0 or newer and npm 12.0.2 or newer。仓库在 `.nvmrc` 里锁定了 24.15.0，配合
-[nvm](https://github.com/nvm-sh/nvm) 可以直接选中：
+需要 Node.js 24.15.0 或更新，以及 npm 12.0.2 或更新。仓库在 `.nvmrc` 里锁定了 24.15.0，配合 [nvm](https://github.com/nvm-sh/nvm) 可以直接选中：
 
 ```bash
 nvm install && nvm use
 npm run toolchain:bootstrap
-```
-
-`toolchain:bootstrap` 会校验仓库内置 npm 归档的大小与 SHA-512，install-time lifecycle scripts disabled
-离线装进 invoked npm's configured global prefix，再核对 CLI 与两个工具版本是否与 `package.json`、
-`.nvmrc` 一致。这一步只在 CI 或需要固定 npm 版本时必要；本地开发通常直接用系统里已装好的 npm 即可跳过。
-
-```bash
 npm install
 npm run dev
 ```
 
-另需一份已安装并登录的 omp：
-
-```bash
-curl -fsSL https://omp.sh/install | sh
-```
-
-### 常用命令
+`toolchain:bootstrap` 会校验仓库内置 npm 归档并固定工具链版本，只在 CI 或需要钉死 npm 时必要；本地开发通常可跳过，直接 `npm install && npm run dev`。首次启动若本机还没有智能体运行时，应用会通过向导检测并安装。
 
 | 命令 | 说明 |
 | --- | --- |
 | `npm run dev` | 启动开发环境（electron-vite） |
-| `npm run typecheck` | 4 个 tsconfig 的类型检查 |
+| `npm run typecheck` | 四个 tsconfig 的类型检查 |
 | `npm test` | vitest 单元与集成测试 |
 | `npm run check` | lint + 格式检查 |
 | `npm run package:mac` | 产出 macOS 安装包 |
 
-### 提交前
+提交前：
 
 ```bash
 npm run typecheck && npm test && npm run check
@@ -80,24 +79,12 @@ npm run typecheck && npm test && npm run check
 
 ## 文档
 
-| 文档 | 内容 |
-| --- | --- |
-| [使用指南](docs/user-guide-zh.md) | 面向最终用户：首启向导、日常使用、常见问题 FAQ |
-| [开发迭代实施计划](docs/ancoder/ITERATION_PLAN.md) | Sprint 划分、验收条件、每个 Sprint 的实际完成情况 |
-| [发布配置指南](docs/ancoder/RELEASE_SETUP.md) | 打 tag 自动发布流程、签名证书与 secrets 配置清单 |
-| [本地构建与手动发布](docs/ancoder/LOCAL_BUILD_AND_RELEASE.md) | CI 跑不了时的应急路径：本机签名公证、跨平台交叉构建、手动发布 |
-| [设计规范](docs/ancoder/design-system.md) | 配色、布局、组件规则（DSH 风格取样） |
-| [裁剪方案](docs/ancoder/trim-plan.md) | 三后端收敛为 omp 单后端的执行方案 |
-| [上游 README](docs/ancoder/upstream-README.md) | 保留的 gooey-pi 原始说明，供对照 |
-
-`docs/` 下其余文件为上游文档，逐步替换中；我们自己的文档统一放在 `docs/ancoder/`，
-以便与上游做 cherry-pick 时不冲突。
+更细的使用说明见 [使用指南](docs/user-guide-zh.md)。
 
 ## 安全
 
-疑似安全漏洞请遵循[security policy](.github/SECURITY.md)，不要公开发布敏感细节；
-完整技术安全模型见 [docs/security.md](docs/security.md)。
+疑似安全漏洞请遵循 [security policy](.github/SECURITY.md)，不要公开发布敏感细节；完整技术安全模型见 [docs/security.md](docs/security.md)。
 
 ## License
 
-MIT，见 [`LICENSE`](LICENSE) 与 [`NOTICE.md`](NOTICE.md)。
+MIT，见 [`LICENSE`](LICENSE)。

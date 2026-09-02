@@ -86,8 +86,8 @@ describe('capability extension environment (OMP)', () => {
   it('omits the vault extension and key/root when no vault config is provided', () => {
     const environment = extensionRuntimeEnvironment(() => browserBridgeEnvironment, extensionPathsWithVault)
     expect(environment.PRIME_WORK_VAULT_EXTENSION_PATH).toBeUndefined()
-    expect(environment.ANCODER_VAULT_KEY).toBeUndefined()
-    expect(environment.ANCODER_VAULT_ROOT).toBeUndefined()
+    expect(environment.MAERWEN_VAULT_KEY).toBeUndefined()
+    expect(environment.MAERWEN_VAULT_ROOT).toBeUndefined()
     expect(OMP_RPC_ADAPTER.buildStartArgs({ cwd: '/work', environment })).not.toContain(extensionPathsWithVault.vault)
   })
 
@@ -100,8 +100,8 @@ describe('capability extension environment (OMP)', () => {
       { key: 'deadbeef', root: '/app/vault-samples/code-review/payload' },
     )
     expect(environment.PRIME_WORK_VAULT_EXTENSION_PATH).toBe('/app/extensions/omp-work-vault.ts')
-    expect(environment.ANCODER_VAULT_KEY).toBe('deadbeef')
-    expect(environment.ANCODER_VAULT_ROOT).toBe('/app/vault-samples/code-review/payload')
+    expect(environment.MAERWEN_VAULT_KEY).toBe('deadbeef')
+    expect(environment.MAERWEN_VAULT_ROOT).toBe('/app/vault-samples/code-review/payload')
     const args = OMP_RPC_ADAPTER.buildStartArgs({ cwd: '/work', environment })
     const injected: string[] = []
     for (let index = 0; index < args.length - 1; index += 1) {
