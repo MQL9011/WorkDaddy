@@ -1,7 +1,7 @@
 import { watch, type Dirent, type Stats } from 'node:fs'
-import { readdir, realpath } from 'node:fs/promises'
+import { readdir, realpath, unlink } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, resolve, sep } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import type { HarnessId, SessionChangeEvent, SessionRecord, TranscriptMessage } from '../../src/types/api'
 import { comparePaths, createAdmissionQueue, createSingleFlight, type AdmissionQueue } from './lib/async'
 import { resolveExecutable, runProcess, type ExecutableSource } from './process-utils'
@@ -226,12 +226,49 @@ export class SessionService {
     return true
   }
 
+  /** Permanently removes one authorized session `.jsonl`. Missing files count as success. */
+  async delete(filePath: unknown): Promise<boolean> {
+    const safePath = await this.resolveSessionPathForDelete(filePath)
+    await this.stopRuntimeForSession(safePath)
+    await unlink(safePath).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error
+    })
+    await this.store.update((state) => {
+      state.archivedSessions = state.archivedSessions.filter((path) => resolve(path) !== resolve(safePath))
+    })
+    this.catalog.invalidateLiveCatalog()
+    const root = await realpath(this.sessionRoot).catch(() => null)
+    const name = root ? relative(root, safePath) : ''
+    this.queueSessionChange(name && !name.startsWith('..') && !isAbsolute(name) ? name : null)
+    return true
+  }
+
   async requireSessionPath(value: unknown): Promise<string> {
     const requested = requireString(value, 'filePath', { min: 1, max: 4096 })
     const root = await realpath(this.sessionRoot)
     const path = await realpath(requested)
     if (!this.isSessionPathAuthorized(root, path)) throw new TypeError('Session path is outside the session directory')
     return path
+  }
+
+  /**
+   * Like `requireSessionPath`, but when the leaf is already gone reconstructs the
+   * authorized path from the real parent directory so delete can still clean up.
+   */
+  private async resolveSessionPathForDelete(value: unknown): Promise<string> {
+    const requested = requireString(value, 'filePath', { min: 1, max: 4096 })
+    const root = await realpath(this.sessionRoot)
+    try {
+      const path = await realpath(requested)
+      if (!this.isSessionPathAuthorized(root, path)) throw new TypeError('Session path is outside the session directory')
+      return path
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      const parent = await realpath(dirname(resolve(requested)))
+      const path = join(parent, basename(requested))
+      if (!this.isSessionPathAuthorized(root, path)) throw new TypeError('Session path is outside the session directory')
+      return path
+    }
   }
 
   private startWatcher(): void {

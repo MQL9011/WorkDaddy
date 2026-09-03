@@ -55,7 +55,7 @@ describe('sidebar project context menu', () => {
         <Sidebar
           projects={[project]} sessions={[session]} activeView="session" updateState={{ phase: 'available', version: '0.2.0' }} onUpdateAction={onUpdateAction}
           onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
-          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
+          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onDeleteSession={async () => undefined}
         />,
       )
     })
@@ -83,7 +83,7 @@ describe('sidebar project context menu', () => {
         <Sidebar
           projects={[project]} sessions={[session]} activeView="session" updateState={{ phase: 'not-available' }} onUpdateAction={onUpdateAction}
           onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
-          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
+          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onDeleteSession={async () => undefined}
         />,
       )
     })
@@ -103,7 +103,7 @@ describe('sidebar project context menu', () => {
         <Sidebar
           projects={[project]} sessions={[session]} activeView="session"
           onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
-          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
+          onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onDeleteSession={async () => undefined}
         />,
       )
     })
@@ -132,7 +132,7 @@ describe('sidebar project context menu', () => {
           onClose={noop}
           onOpenPalette={noop}
           onRenameSession={async () => undefined}
-          onArchiveSession={async () => undefined}
+          onDeleteSession={async () => undefined}
         />,
       )
     })
@@ -167,7 +167,7 @@ describe('sidebar project context menu', () => {
           onClose={noop}
           onOpenPalette={noop}
           onRenameSession={async () => undefined}
-          onArchiveSession={async () => undefined}
+          onDeleteSession={async () => undefined}
         />,
       )
     })
@@ -197,7 +197,7 @@ describe('sidebar project context menu', () => {
           onClose={noop}
           onOpenPalette={noop}
           onRenameSession={async () => undefined}
-          onArchiveSession={async () => undefined}
+          onDeleteSession={async () => undefined}
         />,
       )
     })
@@ -208,9 +208,9 @@ describe('sidebar project context menu', () => {
   })
 })
 
-describe('sidebar archive confirmation', () => {
-  it('requires a second click and cancels when clicking elsewhere', async () => {
-    const onArchiveSession = vi.fn(async () => undefined)
+describe('sidebar delete confirmation', () => {
+  it('opens a modal and deletes only after confirming', async () => {
+    const onDeleteSession = vi.fn(async () => undefined)
     await act(async () => {
       root.render(
         <Sidebar
@@ -226,28 +226,27 @@ describe('sidebar archive confirmation', () => {
           onClose={noop}
           onOpenPalette={noop}
           onRenameSession={async () => undefined}
-          onArchiveSession={onArchiveSession}
+          onDeleteSession={onDeleteSession}
         />,
       )
     })
 
-    const archive = container.querySelector('[aria-label="Archive Session"]')
-    expect(archive).not.toBeNull()
-    expect(archive?.getAttribute('title')).toBe('Archive Session')
-    await press(archive!)
-    expect(onArchiveSession).not.toHaveBeenCalled()
-    expect(container.querySelector('[aria-label="Confirm archive Session"]')).not.toBeNull()
+    const deleteButton = container.querySelector('[aria-label="Delete Session"]')
+    expect(deleteButton).not.toBeNull()
+    expect(deleteButton?.getAttribute('title')).toBe('Delete Session')
+    await press(deleteButton!)
+    expect(onDeleteSession).not.toHaveBeenCalled()
+    expect(document.body.querySelector('[role="dialog"]')?.textContent).toContain('Delete session?')
+    expect(document.body.textContent).toContain('permanently removed')
 
-    await act(async () => document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })))
-    expect(container.querySelector('[aria-label="Confirm archive Session"]')).toBeNull()
-    expect(container.querySelector('[aria-label="Archive Session"]')).not.toBeNull()
+    await press([...document.body.querySelectorAll<HTMLButtonElement>('.modal__footer button')].find((button) => button.textContent === 'Cancel')!)
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull()
+    expect(onDeleteSession).not.toHaveBeenCalled()
 
-    const restarted = container.querySelector('[aria-label="Archive Session"]')
-    await press(restarted!)
-    const confirm = container.querySelector('[aria-label="Confirm archive Session"]')
-    await press(confirm!)
-    expect(onArchiveSession).toHaveBeenCalledOnce()
-    expect(onArchiveSession).toHaveBeenCalledWith(session)
+    await press(container.querySelector('[aria-label="Delete Session"]')!)
+    await press(document.body.querySelector('.modal .button--danger')!)
+    expect(onDeleteSession).toHaveBeenCalledOnce()
+    expect(onDeleteSession).toHaveBeenCalledWith(session)
   })
 })
 
@@ -267,7 +266,7 @@ describe('sidebar session notifications', () => {
       onClose: noop,
       onOpenPalette: noop,
       onRenameSession: async () => undefined,
-      onArchiveSession: async () => undefined,
+      onDeleteSession: async () => undefined,
     }
     await act(async () => { root.render(<Sidebar {...props} />) })
 

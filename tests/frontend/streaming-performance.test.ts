@@ -99,7 +99,7 @@ const sidebarProps = (onNewSession: () => void): SidebarProps => ({
   onClose: () => undefined,
   onOpenPalette: () => undefined,
   onRenameSession: async () => undefined,
-  onArchiveSession: async () => undefined,
+  onDeleteSession: async () => undefined,
 })
 
 describe('Sidebar memoization and scale bounds', () => {

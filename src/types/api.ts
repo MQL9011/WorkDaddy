@@ -598,6 +598,7 @@ export interface PrimeWorkApi {
     read(filePath: string): Promise<TranscriptMessage[]>
     rename(filePath: string, title: string): Promise<boolean>
     archive(filePath: string, archived?: boolean): Promise<boolean>
+    delete(filePath: string): Promise<boolean>
     onChanged(callback: (event: SessionChangeEvent) => void): () => void
   }
   agent: {

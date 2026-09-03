@@ -1094,4 +1094,31 @@ readline.createInterface({ input: process.stdin }).on('line', (line) => {
     expect(stop).toHaveBeenCalledTimes(1)
     expect((await service.list())[0]?.archived).toBe(false)
   })
+
+  it('deletes an authorized session file, stops its runtime, and rejects escapes', async () => {
+    const { root, project, service, store } = setup()
+    const file = join(root, 'delete-me.jsonl')
+    writeSession(file, project, 'delete-me')
+    const safePath = await service.requireSessionPath(file)
+    await store.update((state) => { state.archivedSessions.push(safePath) })
+    const stop = vi.fn(async () => undefined)
+    service.bindRuntimeHooks({
+      get: () => undefined,
+      stop,
+      rename: async () => false,
+    })
+
+    await expect(service.delete(file)).resolves.toBe(true)
+    expect(stop).toHaveBeenCalledWith(safePath)
+    expect(existsSync(file)).toBe(false)
+    expect(await service.list(undefined, true)).toEqual([])
+    expect(store.snapshot().archivedSessions).not.toContain(safePath)
+
+    await expect(service.delete(file)).resolves.toBe(true)
+
+    const outside = join(root, '..', 'outside.jsonl')
+    writeSession(outside, project, 'outside')
+    await expect(service.delete(outside)).rejects.toThrow(/outside the session directory/)
+    expect(existsSync(outside)).toBe(true)
+  })
 })

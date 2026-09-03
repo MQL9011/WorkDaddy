@@ -53,6 +53,7 @@ const api: PrimeWorkApi = {
     read: (filePath) => ipcRenderer.invoke('sessions:read', filePath),
     rename: (filePath, title) => ipcRenderer.invoke('sessions:rename', filePath, title),
     archive: (filePath, archived) => ipcRenderer.invoke('sessions:archive', filePath, archived),
+    delete: (filePath) => ipcRenderer.invoke('sessions:delete', filePath),
     onChanged: (callback) => subscribe<SessionChangeEvent>('sessions:changed', callback),
   },
   agent: {

@@ -233,6 +233,21 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
       setToast(archived ? t('toast.sessionArchived') : t('toast.sessionRestored'))
     } catch (error) { reportError(error) }
   }
+  const deleteSession = async (session: SessionRecord) => {
+    const { bridge, workspace, setSessions, setToast, resetBrowserView, closeTerminalForSession, clearSessionAttention, reportError, t } = getDeps()
+    if (!bridge) return
+    try {
+      if (!await bridge.sessions.delete(session.filePath)) throw new Error(t('toast.sessionDeleteFailed'))
+      clearSessionAttention(session)
+      closeTerminalForSession(session.filePath)
+      setSessions((items) => items.filter((item) => item.id !== session.id))
+      if (workspace.workspaceRef.current.session?.id === session.id) {
+        resetBrowserView()
+        newSession()
+      }
+      setToast(t('toast.sessionDeleted'))
+    } catch (error) { reportError(error) }
+  }
   const addProject = async (): Promise<ProjectRecord | null> => {
     const { bridge, workspace, setProjects, setView, setToast, settingsState, reportError, t } = getDeps()
     if (!bridge) { setToast(t('toast.projectPickerDesktopOnly')); return null }
@@ -541,7 +556,7 @@ export function createWorkspaceActions(getDeps: () => WorkspaceActionsDeps) {
 
   return {
     grantProject, persistPanel, toggleSidebar, toggleInspector, toggleTerminal,
-    selectProject, selectSession, newSession, navigate, renameSession, setSessionArchived,
+    selectProject, selectSession, newSession, navigate, renameSession, setSessionArchived, deleteSession,
     addProject, removeProject, sendPrompt, stopRuntime, installSkill, installExtension, connectMcp, setMcpEnabled, mutateCapability,
     openBrowser, openChanges,
   }

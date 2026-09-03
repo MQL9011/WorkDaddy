@@ -141,6 +141,44 @@ describe('archived activity cleanup', () => {
     expect(setToast).toHaveBeenCalledWith('Session archived.')
   })
 
+  it('removes the session and recreates the browser host when deleting the open session', async () => {
+    const deleteSession = vi.fn(async () => true)
+    const clearSessionAttention = vi.fn()
+    const closeTerminalForSession = vi.fn()
+    const resetBrowserView = vi.fn()
+    const activateWorkspace = vi.fn()
+    const setToast = vi.fn()
+    let sessions = [activeSession]
+    const setSessions = vi.fn((update: (items: SessionRecord[]) => SessionRecord[]) => { sessions = update(sessions) })
+    const actions = createWorkspaceActions(() => ({
+      bridge: { sessions: { delete: deleteSession } },
+      initialized: true,
+      activeProject: project,
+      layout: { compactLayout: false },
+      settingsState: {},
+      workspace: { workspaceRef: { current: { project, session: activeSession } }, activateWorkspace },
+      setSessions,
+      setView: vi.fn(),
+      setPaletteOpen: vi.fn(),
+      setToast,
+      resetBrowserView,
+      closeTerminalForSession,
+      clearSessionAttention,
+      reportError: vi.fn(),
+      t: (key: string, values?: Record<string, string | number>) => translate('en', key as never, values),
+    } as unknown as WorkspaceActionsDeps))
+
+    await actions.deleteSession(activeSession)
+
+    expect(deleteSession).toHaveBeenCalledWith(activeSession.filePath)
+    expect(clearSessionAttention).toHaveBeenCalledWith(activeSession)
+    expect(closeTerminalForSession).toHaveBeenCalledWith(activeSession.filePath)
+    expect(sessions).toEqual([])
+    expect(resetBrowserView).toHaveBeenCalledOnce()
+    expect(activateWorkspace).toHaveBeenCalledWith(project)
+    expect(setToast).toHaveBeenCalledWith('Session deleted.')
+  })
+
   it('recreates the browser host when archiving the open session', async () => {
     const archive = vi.fn(async () => true)
     const resetBrowserView = vi.fn()

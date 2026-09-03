@@ -46,7 +46,7 @@ async function renderSidebar(updateState: AppUpdateState, onUpdateAction: () => 
       <Sidebar
         projects={[project]} sessions={[session]} activeView="session" updateState={updateState} onUpdateAction={onUpdateAction}
         onSelectProject={noop} onSelectSession={noop} onNavigate={noop} onNewSession={noop} onAddProject={noop} onRemoveProject={noop}
-        onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onArchiveSession={async () => undefined}
+        onClose={noop} onOpenPalette={noop} onRenameSession={async () => undefined} onDeleteSession={async () => undefined}
       />,
     )
   })

@@ -172,6 +172,14 @@ export function registerIpc(services: Services, expectedRendererUrl: string): Ip
     }
     return result
   })
+  handle('sessions:delete', async (_event, filePath) => {
+    const result = await services.sessions.delete(filePath)
+    if (result) {
+      services.browser.closeForSession(filePath)
+      await services.terminals.killForSession(filePath)
+    }
+    return result
+  })
 
   handle('agent:start', (_event, rawOptions) => {
     const options = requireRecord(rawOptions, 'options')

@@ -1,7 +1,5 @@
 import {
-  Archive,
   Bell,
-  Check,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -52,7 +50,7 @@ export interface SidebarProps {
   onClose(): void
   onOpenPalette(): void
   onRenameSession(session: SessionRecord, title: string): Promise<void>
-  onArchiveSession(session: SessionRecord): Promise<void>
+  onDeleteSession(session: SessionRecord): Promise<void>
   overlay?: boolean
   platform?: NodeJS.Platform
 }
@@ -186,7 +184,7 @@ async function copySessionUuid(id: string): Promise<void> {
   if (!copied) throw new Error('Copy is unavailable')
 }
 
-function SidebarView({ projects, sessions, activeProjectId, activeSessionId, activeView, activeHarness = 'omp', clearedAttention = {}, updateState = { phase: 'unsupported' }, onUpdateAction, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, onClose, onOpenPalette, onRenameSession, onArchiveSession, overlay = false, platform = 'darwin' }: SidebarProps) {
+function SidebarView({ projects, sessions, activeProjectId, activeSessionId, activeView, activeHarness = 'omp', clearedAttention = {}, updateState = { phase: 'unsupported' }, onUpdateAction, onSelectProject, onSelectSession, onNavigate, onNewSession, onAddProject, onRemoveProject, onClose, onOpenPalette, onRenameSession, onDeleteSession, overlay = false, platform = 'darwin' }: SidebarProps) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -196,7 +194,7 @@ function SidebarView({ projects, sessions, activeProjectId, activeSessionId, act
   const [sessionMenu, setSessionMenu] = useState<string | null>(null)
   const [renameTarget, setRenameTarget] = useState<SessionRecord | null>(null)
   const [renameValue, setRenameValue] = useState('')
-  const [archiveTarget, setArchiveTarget] = useState<SessionRecord | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<SessionRecord | null>(null)
   const [removeTarget, setRemoveTarget] = useState<ProjectRecord | null>(null)
   const [confirmUpdate, setConfirmUpdate] = useState(false)
   const { activeSessions, sessionsByProject } = useMemo(() => indexSidebarSessions(projects, sessions), [projects, sessions])
@@ -228,15 +226,6 @@ function SidebarView({ projects, sessions, activeProjectId, activeSessionId, act
     document.addEventListener('pointerdown', dismiss, true); document.addEventListener('keydown', dismissOnEscape, true)
     return () => { document.removeEventListener('pointerdown', dismiss, true); document.removeEventListener('keydown', dismissOnEscape, true) }
   }, [sessionMenu])
-  useEffect(() => {
-    if (!archiveTarget) return
-    const dismiss = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest('[data-archive-confirming="true"]')) setArchiveTarget(null)
-    }
-    const dismissOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); setArchiveTarget(null) } }
-    document.addEventListener('pointerdown', dismiss, true); document.addEventListener('keydown', dismissOnEscape, true)
-    return () => { document.removeEventListener('pointerdown', dismiss, true); document.removeEventListener('keydown', dismissOnEscape, true) }
-  }, [archiveTarget])
   const normalized = query.trim().toLowerCase()
   const visibleProjects = useMemo(() => projects.filter((project) => !normalized || project.name.toLowerCase().includes(normalized) || (sessionsByProject.get(project.id) ?? []).some((session) => `${session.title} ${session.preview ?? ''}`.toLowerCase().includes(normalized))), [projects, sessionsByProject, normalized])
 
@@ -303,16 +292,13 @@ function SidebarView({ projects, sessions, activeProjectId, activeSessionId, act
                       </button>
                       <IconButton
                         size="small"
-                        className={`session-row__archive ${archiveTarget?.id === session.id ? 'is-confirming' : ''}`}
-                        label={archiveTarget?.id === session.id ? t('sidebar.session.confirmArchive', { title: session.title }) : t('sidebar.session.archive', { title: session.title })}
-                        data-archive-confirming={archiveTarget?.id === session.id}
+                        className="session-row__archive"
+                        label={t('sidebar.session.delete', { title: session.title })}
                         onClick={() => {
                           setSessionMenu(null)
-                          if (archiveTarget?.id !== session.id) { setArchiveTarget(session); return }
-                          setArchiveTarget(null)
-                          void onArchiveSession(session)
+                          setDeleteTarget(session)
                         }}
-                      >{archiveTarget?.id === session.id ? <Check size={13} /> : <Archive size={13}/>}</IconButton>
+                      ><Trash2 size={13}/></IconButton>
                       <IconButton size="small" className="session-row__more" label={t('sidebar.session.optionsAria', { title: session.title })} onClick={() => setSessionMenu((current) => current === session.id ? null : session.id)}><MoreHorizontal size={13}/></IconButton>
                       {sessionMenu === session.id ? <div className="session-row__menu" aria-label={t('sidebar.session.optionsMenuAria')}><button type="button" onClick={() => { void copySessionUuid(session.id); setSessionMenu(null) }}><Copy size={12}/> {t('sidebar.session.copyUuid')}</button><button type="button" onClick={() => { setRenameTarget(session); setRenameValue(session.title); setSessionMenu(null) }}><SquarePen size={12}/> {t('common.rename')}</button></div> : null}
                     </div>
@@ -351,6 +337,7 @@ function SidebarView({ projects, sessions, activeProjectId, activeSessionId, act
         </div>
       </div>
       {renameTarget ? <Modal title={t('sidebar.renameSession.title')} onClose={() => setRenameTarget(null)} footer={<><button type="button" className="button" onClick={() => setRenameTarget(null)}>{t('common.cancel')}</button><button type="button" className="button button--primary" disabled={!renameValue.trim()} onClick={() => { const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) }}>{t('common.rename')}</button></>}><label className="field"><span>{t('sidebar.renameSession.fieldLabel')}</span><input autoFocus value={renameValue} maxLength={200} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && renameValue.trim()) { event.preventDefault(); const target = renameTarget; const title = renameValue.trim(); setRenameTarget(null); void onRenameSession(target, title) } }}/></label></Modal> : null}
+      {deleteTarget ? <Modal title={t('sidebar.session.deleteTitle')} onClose={() => setDeleteTarget(null)} footer={<><button type="button" className="button" onClick={() => setDeleteTarget(null)}>{t('common.cancel')}</button><button type="button" className="button button--danger" onClick={() => { const target = deleteTarget; setDeleteTarget(null); void onDeleteSession(target) }}>{t('common.delete')}</button></>}><p>{t('sidebar.session.deleteBody', { title: deleteTarget.title })}</p></Modal> : null}
       {removeTarget ? <Modal title={t('sidebar.project.remove')} onClose={() => setRemoveTarget(null)} footer={<><button type="button" className="button" onClick={() => setRemoveTarget(null)}>{t('common.cancel')}</button><button type="button" className="button button--danger" onClick={() => { const target = removeTarget; setRemoveTarget(null); onRemoveProject(target) }}>{t('common.remove')}</button></>}><p>{t('sidebar.removeProject.body', { name: removeTarget.name, product: HARNESS_PRODUCT_NAMES[activeHarness] })}</p></Modal> : null}
       {confirmUpdate ? <Modal title={updateConfirm.title} onClose={() => setConfirmUpdate(false)} footer={<><button type="button" className="button" onClick={() => setConfirmUpdate(false)}>{t('common.no')}</button><button type="button" className="button button--primary" onClick={() => { setConfirmUpdate(false); void onUpdateAction?.() }}>{t('common.yes')}</button></>}><p>{updateConfirm.body}</p></Modal> : null}
     </aside>
@@ -378,7 +365,7 @@ export function areSidebarPropsEqual(previous: SidebarProps, next: SidebarProps)
     && previous.onClose === next.onClose
     && previous.onOpenPalette === next.onOpenPalette
     && previous.onRenameSession === next.onRenameSession
-    && previous.onArchiveSession === next.onArchiveSession
+    && previous.onDeleteSession === next.onDeleteSession
     && previous.overlay === next.overlay
     && previous.platform === next.platform
 }

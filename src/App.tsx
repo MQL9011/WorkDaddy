@@ -331,7 +331,7 @@ export default function App() {
 
   const {
     toggleSidebar, toggleInspector, grantProject,
-    selectProject, selectSession, newSession, navigate, renameSession, setSessionArchived,
+    selectProject, selectSession, newSession, navigate, renameSession, deleteSession,
     addProject, removeProject, sendPrompt, stopRuntime, installSkill, installExtension, connectMcp, setMcpEnabled, mutateCapability,
     openBrowser, openChanges,
   } = useWorkspaceActions({
@@ -419,7 +419,7 @@ export default function App() {
     onClose: toggleSidebar,
     onOpenPalette: () => setPaletteOpen(true),
     onRenameSession: renameSession,
-    onArchiveSession: (session) => setSessionArchived(session, true),
+    onDeleteSession: deleteSession,
   })
 
   const onAppKeyDown = useStableCallback(createAppKeydownHandler({

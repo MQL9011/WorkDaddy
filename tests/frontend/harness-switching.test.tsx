@@ -294,7 +294,7 @@ describe('sidebar brand', () => {
           onClose={noop}
           onOpenPalette={noop}
           onRenameSession={async () => undefined}
-          onArchiveSession={async () => undefined}
+          onDeleteSession={async () => undefined}
         />,
       )
     })

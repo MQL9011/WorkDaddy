@@ -96,6 +96,7 @@ function buildServices() {
       read: vi.fn(async () => ['omp-transcript']),
       rename: vi.fn(async () => true),
       archive: vi.fn(async () => true),
+      delete: vi.fn(async () => true),
     },
     agents: {
       ...serviceStub(),
@@ -247,6 +248,16 @@ describe('harness-aware IPC routing', () => {
     await expect(harness.invoke('sessions:archive', OMP_SESSION, false)).resolves.toBe(true)
     expect(harness.services.browser.closeForSession).not.toHaveBeenCalled()
     expect(harness.services.terminals.killForSession).not.toHaveBeenCalled()
+  })
+
+  it('routes sessions:delete and disposes browser/terminal state', async () => {
+    harness.services.browser.closeForSession.mockClear()
+    harness.services.terminals.killForSession.mockClear()
+
+    await expect(harness.invoke('sessions:delete', OMP_SESSION)).resolves.toBe(true)
+    expect(harness.services.sessions.delete).toHaveBeenCalledWith(OMP_SESSION)
+    expect(harness.services.browser.closeForSession).toHaveBeenCalledWith(OMP_SESSION)
+    expect(harness.services.terminals.killForSession).toHaveBeenCalledWith(OMP_SESSION)
   })
 
   it('does not register the retired daemon follow-up or MCP OAuth channels', () => {
