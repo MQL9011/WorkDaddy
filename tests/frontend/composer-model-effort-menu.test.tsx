@@ -136,7 +136,7 @@ describe('composer model / reasoning effort menus', () => {
     act(() => container.querySelector<HTMLButtonElement>('[aria-label="Model"]')?.click())
     expect(container.querySelector('[role="menu"][aria-label="Model"]')).not.toBeNull()
 
-    act(() => { document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })) })
+    act(() => { document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true })) })
     expect(container.querySelector('[role="menu"][aria-label="Model"]')).toBeNull()
     expect(onModelChange).not.toHaveBeenCalled()
   })
